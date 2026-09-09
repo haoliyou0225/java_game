@@ -12,8 +12,12 @@ public interface IHook {
     void forceRetractByBoundary();
     // FR-08 紧急收回，空钩状态下立即回弹无需等待触达边界
     void emergencyRetractNow();
+    // FR-13 双钩互撞后触发2秒眩晕停滞惩罚
+    void stunMovement(int stunSeconds);
     // FR-16/FR-22 冻结钩爪全部运动指定秒数，到期自动恢复
     void freezeMovement(int freezeSeconds);
+    // FR-17 炸毁当前钩上挂载的物品，钩爪立即回弹回起点恢复摇摆
+    void explodeCurrentCarryItem();
     // FR-21 开启收回速度翻倍效果，持续指定秒数
     void enableRetractSpeedDouble(int durationSeconds);
     // 逐帧更新钩子物理状态，由GameManager主循环调用，对齐全局类图updateSwing方法
