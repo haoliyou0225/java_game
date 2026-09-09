@@ -1,8 +1,8 @@
 // FR-18 画布渲染：renderAll(GameData,Hook,Hook,List<Item>) 绘制背景/双钩/绳索/物品，drawHUD 分数与倒计时
-package com.dz.hello.main.view;
+package com.dz.hello.Main.view;
 
-import com.dz.hello.main.config.GameConfig;
-import com.dz.hello.main.model.*;
+import com.dz.hello.Main.config.GameConfig;
+import com.dz.hello.Main.model.*;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;

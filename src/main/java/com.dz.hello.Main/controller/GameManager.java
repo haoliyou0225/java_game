@@ -1,8 +1,8 @@
 // FR-16 游戏管理器：每帧调度 gameLoopTick(deltaTime)、输入分发 dispatchAction、胜负判定 judgeOver，组装 Hook/Rope/GameData/Level
-package com.dz.hello.main.controller;
+package com.dz.hello.Main.controller;
 
-import com.dz.hello.main.model.*;
-import com.dz.hello.main.config.GameConfig;
+import com.dz.hello.Main.model.*;
+import com.dz.hello.Main.config.GameConfig;
 
 import java.util.ArrayList;
 import java.util.List;

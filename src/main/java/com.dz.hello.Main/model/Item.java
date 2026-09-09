@@ -1,5 +1,5 @@
 // FR-06 物品抽象基类：x/y 坐标、score 分值、weight 重量、grabbed 抓取状态，子类重写 onGrab/updatePosition
-package com.dz.hello.main.model;
+package com.dz.hello.Main.model;
 
 public abstract class Item {
     protected double x;

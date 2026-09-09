@@ -1,7 +1,7 @@
 // FR-13 关卡：generateSceneItems() 随机生成 Gold/Diamond/Stone/Bomb 混合场景
-package com.dz.hello.main.model;
+package com.dz.hello.Main.model;
 
-import com.dz.hello.main.config.GameConfig;
+import com.dz.hello.Main.config.GameConfig;
 
 import java.util.ArrayList;
 import java.util.List;

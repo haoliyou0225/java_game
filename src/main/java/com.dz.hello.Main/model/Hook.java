@@ -1,8 +1,8 @@
 // FR-11 钩子核心：钟摆 updateSwing / 抛出 throwHook / 收回 retractHook / 与物品碰撞 checkCollisionItem / 与对钩碰撞 checkCollisionOtherHook
-package com.dz.hello.main.model;
+package com.dz.hello.Main.model;
 
-import com.dz.hello.main.config.GameConfig;
-import com.dz.hello.main.util.CollisionUtil;
+import com.dz.hello.Main.config.GameConfig;
+import com.dz.hello.Main.util.CollisionUtil;
 
 import java.util.List;
 

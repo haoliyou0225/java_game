@@ -1,5 +1,5 @@
 // FR-20 程序启动器：不含 main()，避免 JavaFX 模块检查问题，由 Application.launch(MainApp) 拉起
-package com.dz.hello.main;
+package com.dz.hello.Main;
 
 import javafx.application.Application;
 

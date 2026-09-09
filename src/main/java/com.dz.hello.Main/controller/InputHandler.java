@@ -1,5 +1,5 @@
 // FR-15 键盘输入处理：onKeyPressed(KeyCode) → InputAction，空格=玩家1、回车=玩家2
-package com.dz.hello.main.controller;
+package com.dz.hello.Main.controller;
 
 import javafx.scene.input.KeyCode;
 

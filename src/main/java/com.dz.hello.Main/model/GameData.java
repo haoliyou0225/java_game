@@ -1,5 +1,5 @@
 // FR-12 游戏数据：双玩家独立计分 scoreP1/P2、倒计时 remainSec、阶段 stage、胜负判定 getWinnerId
-package com.dz.hello.main.model;
+package com.dz.hello.Main.model;
 
 public class GameData {
     private int scoreP1;

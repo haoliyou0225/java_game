@@ -1,5 +1,5 @@
 // FR-19 菜单界面：drawStartMenu() 开始菜单、drawResultPanel(winnerId) 结算弹窗
-package com.dz.hello.main.view;
+package com.dz.hello.Main.view;
 
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
