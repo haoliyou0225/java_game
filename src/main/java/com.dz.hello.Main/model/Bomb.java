@@ -10,10 +10,7 @@ public class Bomb extends Item {
 
     @Override
     public void onGrab(Hook hook) {
-        // FR-14 碰到TNT后触发爆炸逻辑
-        if (!exploded) {
-            triggerExplode();
-        }
+        // 被抓取时不立即爆炸，待 GameManager 在收回结算时统一触发（见 triggerExplode）
     }
 
     @Override

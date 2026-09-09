@@ -22,8 +22,8 @@ public class GameManager {
     private List<Item> sceneItemList;
 
     public GameManager() {
-        this.ropeP1 = new Rope(300);
-        this.ropeP2 = new Rope(300);
+        this.ropeP1 = new Rope(GameConfig.ROPE_MAX_EXTEND_LENGTH);
+        this.ropeP2 = new Rope(GameConfig.ROPE_MAX_EXTEND_LENGTH);
         this.hookP1 = new Hook(1, ropeP1);
         this.hookP2 = new Hook(2, ropeP2);
         this.gameData = new GameData(GameConfig.GAME_TOTAL_SEC);
@@ -45,23 +45,25 @@ public class GameManager {
         hookP1.update(deltaTime, sceneItemList, hookP2);
         hookP2.update(deltaTime, sceneItemList, hookP1);
 
-        // 更新已抓取物品位置 + 炸弹触发
+        // 更新已抓取物品位置 + 收回完成结算
+        List<Item> settled = new ArrayList<>();
         for (Item item : sceneItemList) {
             item.updatePosition();
             if (item.isGrabbed() && item.getWeight() > 0) {
-                Item grabb = item;
                 Hook owner = itemOnHook(item) == 1 ? hookP1 : hookP2;
                 if (owner.getState() == HookState.SWINGING) {
-                    grabb.setGrabbed(false);
-                    gameData.addScore(grabb.getScore(), itemOnHook(item));
-                    if (grabb instanceof Bomb) {
-                        ((Bomb) grabb).triggerExplode();
+                    item.setGrabbed(false);
+                    gameData.addScore(item.getScore(), owner.getPlayerId());
+                    if (item instanceof Bomb) {
+                        ((Bomb) item).triggerExplode();
                     }
+                    settled.add(item);
                 }
             }
         }
+        sceneItemList.removeAll(settled);
 
-        // 移除已爆炸的炸弹和已抓取完成的物品
+        // 移除已爆炸的炸弹
         sceneItemList.removeIf(i -> (i instanceof Bomb && ((Bomb) i).isExploded()));
 
         // 每秒倒计时
@@ -85,16 +87,10 @@ public class GameManager {
         return gameData.getStage() == GameStage.GAME_OVER;
     }
 
-    /** 粗略判断物品在哪个钩子上 */
+    /** 判断物品挂在哪个钩子上 */
     private int itemOnHook(Item item) {
-        // 简化：看 item 被哪个钩子的绳长范围圈住
-        double ix = item.getX(), iy = item.getY();
-        double h1x = 0, h1y = 0;
-        double h2x = 0, h2y = 0;
-        double d1 = Math.hypot(ix - h1x, iy - h1y);
-        double d2 = Math.hypot(ix - h2x, iy - h2y);
-        if (d1 < hookP1.getRopeLength()) return 1;
-        if (d2 < hookP2.getRopeLength()) return 2;
+        if (hookP1.ownsItem(item)) return 1;
+        if (hookP2.ownsItem(item)) return 2;
         return 1;
     }
 

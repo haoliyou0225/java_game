@@ -4,8 +4,15 @@ package com.dz.hello.main.model;
 public class Rope {
     private double maxLen;
     private double currentLen;
-    public Rope(double maxLen) {}
-    public double getMaxLen() { return 0; }
-    public double getCurrentLen() { return 0; }
-    public void setCurrentLen(double len) {}
+
+    public Rope(double maxLen) {
+        this.maxLen = maxLen;
+        this.currentLen = 0;
+    }
+
+    public double getMaxLen() { return maxLen; }
+    public double getCurrentLen() { return currentLen; }
+    public void setCurrentLen(double len) {
+        this.currentLen = Math.max(0, Math.min(len, maxLen));
+    }
 }

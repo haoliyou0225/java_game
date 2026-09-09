@@ -6,13 +6,40 @@ public class GameData {
     private int scoreP2;
     private int remainSec;
     private GameStage stage;
-    public GameData(int totalSec) {}
-    public void addScore(int score, int playerId) {}
-    public void countDownTick() {}
-    public int getWinnerId() { return 0; }
-    public GameStage getStage() { return null; }
-    public void setStage(GameStage stage) {}
-    public int getScoreP1() { return 0; }
-    public int getScoreP2() { return 0; }
-    public int getRemainSec() { return 0; }
+
+    public GameData(int totalSec) {
+        this.scoreP1 = 0;
+        this.scoreP2 = 0;
+        this.remainSec = totalSec;
+        this.stage = GameStage.READY;
+    }
+
+    public void addScore(int score, int playerId) {
+        if (playerId == 1) {
+            scoreP1 += score;
+        } else if (playerId == 2) {
+            scoreP2 += score;
+        }
+    }
+
+    public void countDownTick() {
+        if (remainSec > 0) {
+            remainSec--;
+            if (remainSec <= 0) {
+                stage = GameStage.GAME_OVER;
+            }
+        }
+    }
+
+    public int getWinnerId() {
+        if (scoreP1 > scoreP2) return 1;
+        if (scoreP2 > scoreP1) return 2;
+        return 0;
+    }
+
+    public GameStage getStage() { return stage; }
+    public void setStage(GameStage stage) { this.stage = stage; }
+    public int getScoreP1() { return scoreP1; }
+    public int getScoreP2() { return scoreP2; }
+    public int getRemainSec() { return remainSec; }
 }

@@ -27,7 +27,7 @@ public class GameMenu {
         g.fillText("双人钩子矿工", 260, 250);
         g.setFont(Font.font(18));
         g.fillText("P1: 空格  |  P2: 回车", 290, 300);
-        g.fillText("点击开始游戏", 330, 350);
+        g.fillText("按空格或回车开始游戏", 300, 350);
     }
 
     /** 绘制结果面板 */

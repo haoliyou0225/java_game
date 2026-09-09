@@ -10,6 +10,6 @@ public class InputAction {
         this.type = type;
         this.playerId = playerId;
     }
-    public String getType() { return null; }
-    public int getPlayerId() { return 0; }
+    public String getType() { return type; }
+    public int getPlayerId() { return playerId; }
 }

@@ -1,6 +1,7 @@
 // FR-18 画布渲染：renderAll(GameData,Hook,Hook,List<Item>) 绘制背景/双钩/绳索/物品，drawHUD 分数与倒计时
 package com.dz.hello.main.view;
 
+import com.dz.hello.main.config.GameConfig;
 import com.dz.hello.main.model.*;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -45,7 +46,8 @@ public class GameUI {
 
     /** 绘制单个钩子与绳索 */
     private void drawHook(GraphicsContext g, Hook hook, Color color) {
-        int anchorX = 400, anchorY = 0;
+        double anchorX = hook.getPlayerId() == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2;
+        double anchorY = GameConfig.HOOK_ANCHOR_Y;
         double tipX = anchorX + Math.cos(hook.getAngle()) * hook.getRopeLength();
         double tipY = anchorY + Math.sin(hook.getAngle()) * hook.getRopeLength();
         g.setStroke(color);

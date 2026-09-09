@@ -23,11 +23,19 @@ public final class GameConfig {
     /** 地图左右半区最大允许价值差百分比 */
     public static final int MAP_MAX_VALUE_DIFF_PERCENT = 5;
 
+    // 钩子锚点（渲染与碰撞共用，双钩左右分置）
+    /** P1 钩子锚点 X 坐标（左侧三分之一处） */
+    public static final double HOOK_ANCHOR_X_P1 = 270;
+    /** P2 钩子锚点 X 坐标（右侧三分之一处） */
+    public static final double HOOK_ANCHOR_X_P2 = 530;
+    /** 钩子锚点 Y 坐标 */
+    public static final double HOOK_ANCHOR_Y = 0;
+
     // 钩子物理模块专属配置 完全对齐人员2 FR需求
     /** 钩子钟摆摆动速度（弧度/秒） */
     public static final double HOOK_SWING_SPEED = 1.5;
     /** 绳索最大延伸长度 单位像素 */
-    public static final double ROPE_MAX_EXTEND_LENGTH = 350;
+    public static final double ROPE_MAX_EXTEND_LENGTH = 450;
     /** 空钩收回速度 像素/秒 */
     public static final double HOOK_EMPTY_RETRACT_SPEED = 600;
     /** 带物品基础收回速度 像素/秒 */

@@ -4,7 +4,12 @@ package com.dz.hello.main.model;
 public class CollisionResult {
     private boolean isHit;
     private Item hitItem;
-    public CollisionResult(boolean isHit, Item hitItem) {}
-    public boolean isHit() { return false; }
-    public Item getHitItem() { return null; }
+
+    public CollisionResult(boolean isHit, Item hitItem) {
+        this.isHit = isHit;
+        this.hitItem = hitItem;
+    }
+
+    public boolean isHit() { return isHit; }
+    public Item getHitItem() { return hitItem; }
 }
