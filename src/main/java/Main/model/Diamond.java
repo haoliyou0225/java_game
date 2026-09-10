@@ -1,22 +1,8 @@
+// FR-08 钻石：分数 100（最高）、重量 1.0（最轻），收回速度最快
 package Main.model;
 
-import controller.hook.IHook;
-
-/**
- * 钻石：最高分轻量物品
- */
-public class Diamond extends Item {
-
-    public Diamond(double x, double y) {
-        this.x = x;
-        this.y = y;
-        this.scoreVal = 200;
-        this.weight = 1.2;
-        this.grabbed = false;
-    }
-
-    @Override
-    public void onGrab(IHook hook) {
-        this.grabbed = true;
-    }
+public class Diamond extends ItemImpl {
+    public Diamond(double x, double y) { super(x, y, 200, 1.2); }
+    @Override public void onGrab(Hook hook) {}
+    @Override public void updatePosition() {}
 }

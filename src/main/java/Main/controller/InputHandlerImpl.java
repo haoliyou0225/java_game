@@ -1,0 +1,19 @@
+// FR-15 键盘输入处理实现：onKeyPressed(KeyCode) → InputAction，空格=玩家1、回车=玩家2
+package Main.controller;
+
+import javafx.scene.input.KeyCode;
+
+public class InputHandlerImpl implements InputHandler {
+
+    /** 按键 → 输入动作分发 */
+    @Override
+    public InputAction onKeyPressed(KeyCode key) {
+        if (key == KeyCode.SPACE) {
+            return new InputActionImpl(InputAction.THROW_P1, 1);
+        }
+        if (key == KeyCode.ENTER) {
+            return new InputActionImpl(InputAction.THROW_P2, 2);
+        }
+        return null;
+    }
+}

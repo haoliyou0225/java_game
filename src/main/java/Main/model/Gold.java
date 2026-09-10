@@ -1,22 +1,8 @@
+// FR-07 金块：分数 50、重量 2.0，默认普通物品
 package Main.model;
 
-import controller.hook.IHook;
-
-/**
- * 金块：高分轻量物品
- */
-public class Gold extends Item {
-
-    public Gold(double x, double y) {
-        this.x = x;
-        this.y = y;
-        this.scoreVal = 100;
-        this.weight = 1.0;
-        this.grabbed = false;
-    }
-
-    @Override
-    public void onGrab(IHook hook) {
-        this.grabbed = true;
-    }
+public class Gold extends ItemImpl {
+    public Gold(double x, double y) { super(x, y, 100, 1.0); }
+    @Override public void onGrab(Hook hook) {}
+    @Override public void updatePosition() {}
 }

@@ -1,32 +1,11 @@
+// FR-UI Player：玩家接口（分数读取/加分），来自 feature_ui 分支
 package Main.model;
 
-/**
- * 玩家账户：每个玩家各自持有独立的金币余额。
- * 物品结算时只给抓取者本人的账户加金币，玩家之间完全隔离，
- * A 抓取的物品分数绝对不会加到 B 的账户。
- */
-public class Player {
+public interface Player {
 
-    private final String name;
-    private int gold;
+    /** 当前分数（FR-29：HUD 实时显示） */
+    int getScore();
 
-    public Player(String name) {
-        this.name = name;
-        this.gold = 0;
-    }
-
-    /**
-     * 物品结算入账：正数加分（金块/钻石），负数扣分（炸弹）
-     */
-    public void addGold(int amount) {
-        this.gold += amount;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public int getGold() {
-        return gold;
-    }
+    /** 增加分数（抓到物品结算后调用） */
+    void addScore(int points);
 }

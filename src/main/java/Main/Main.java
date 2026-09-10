@@ -1,470 +1,181 @@
+// FR-UI Main：程序入口（feature_ui 版主界面）——主菜单/对局/暂停/结算四阶段流程，组装 GameModel/GameView/HUDView/GameTimer/InputController
 package Main;
 
-import Main.model.Player;
-import Main.model.Diamond;
-import Main.model.Gold;
-import Main.model.Item;
-import Main.model.ItemFactory;
-import Main.model.Stone;
-import Main.util.CollisionUtil;
-import controller.hook.IHook;
+import Main.config.Config;
+import Main.controller.GameManagerImpl;
+import Main.controller.GameTimer;
+import Main.controller.GameTimerImpl;
+import Main.controller.InputController;
+import Main.controller.InputControllerImpl;
+import Main.model.GameModel;
+import Main.model.GameState;
+import Main.view.HUDView;
+import Main.view.HUDViewImpl;
+import Main.view.GameView;
+import Main.view.GameViewImpl;
+import Main.view.MenuView;
+import Main.view.MenuViewImpl;
+import Main.view.PauseView;
+import Main.view.PauseViewImpl;
+import Main.view.ResultView;
+import Main.view.ResultViewImpl;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
-import javafx.scene.Group;
-import javafx.scene.Node;
+import javafx.application.Platform;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Pane;
-import javafx.scene.paint.Color;
-import javafx.scene.paint.CycleMethod;
-import javafx.scene.paint.LinearGradient;
-import javafx.scene.paint.RadialGradient;
-import javafx.scene.paint.Stop;
-import javafx.scene.shape.Circle;
-import javafx.scene.shape.Line;
-import javafx.scene.shape.Polygon;
-import javafx.scene.shape.QuadCurve;
-import javafx.scene.shape.Shape;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
 import javafx.stage.Stage;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-
 /**
- * 游戏入口（可视化测试版），完整串联模型层功能：
- *  1. 物品生成：ItemFactory 按权重表随机生成金块/钻石/石头/炸弹
- *  2. 抓取：点击物品 = 当前玩家钩爪抓住（onGrab）
- *  3. 多态运动：被携带物品每帧 updatePosition 跟随钩爪，越重越慢
- *  4. 物品结算：钩爪带着物品回到顶部起点，物品销毁，金币计入“抓取者”账户
- *     （石头特殊：仅计 1 金币；炸弹：扣 150）
- *  5. 独立计分：玩家 A / B 账户完全隔离，按空格切换当前操作玩家，
- *     A 抓的物品即使中途切到 B 再回起点，金币仍然进 A 账户
+ * 程序入口（FR-32 主菜单，feature_ui 分支版本）
+ * 启动后显示主菜单：标题 GoldMainer、"开始对战"、"退出游戏"。
+ * <p>
+ * 说明：hook 分支的钩子玩法（GameManager/HookImpl 真实物理）保留在原类中，
+ * 当前入口使用 UI 分支的 GameModel + 假数据（DummyDataFactory）跑通完整界面流程；
+ * 后续将 DummyDataFactory 替换为真实钩爪/物品即可接入钩子玩法。
  */
 public class Main extends Application {
 
-    private static final double HOOK_RADIUS = 18;
-    /** 钩爪起点/回收结算点（画面顶部中央） */
-    private static final double START_X = 320;
-    private static final double START_Y = 60;
-    /** 钩爪进入该半径范围即视为回到起点，触发结算 */
-    private static final double SETTLE_RADIUS = 40;
-    /** 随机生成的物品数量 */
-    private static final int ITEM_COUNT = 9;
-
-    private final Random rnd = new Random();
-    private final ItemFactory itemFactory = new ItemFactory();
-
-    /** 两名玩家，各自独立账户 */
-    private final Player[] players = {new Player("A"), new Player("B")};
-    /** 两名玩家各自的钩爪（IHook 实例） */
-    private final IHook[] hooks = {new IHook() {
-    }, new IHook() {
-    }};
-    private int activeIndex = 0;
-
-    private final List<Item> items = new ArrayList<>();
-    private final Map<Item, Group> itemViews = new HashMap<>();
-    private final Map<Item, Shape> itemShapes = new HashMap<>();
-    private final Map<Item, Double> itemRadii = new HashMap<>();
-    private final Map<Item, Color> itemBaseStrokes = new HashMap<>();
-
-    /** 当前被钩爪携带的物品及其抓取者（结算时计入抓取者账户） */
-    private Item carried;
-    private Player carriedBy;
-
-    /** 钩爪当前位置（跟随鼠标） */
-    private double hookX = START_X;
-    private double hookY = START_Y;
-
-    private Pane root;
-    private Circle hookHead;
-    private Text scoreA;
-    private Text scoreB;
-    private Text activeLabel;
-    private Text message;
-    private long messageUntil;
-
     @Override
-    public void start(Stage stage) {
-        root = new Pane();
-        root.setStyle("-fx-background-color: #f0f4f8;");
+    public void start(Stage primaryStage) {
+        primaryStage.setTitle("黄金矿工 - 双人PK版");
+        primaryStage.setResizable(false); // 锁定窗口大小
 
-        drawStartPoint();
-        spawnItems();
+        Pane root = new Pane(); // 全局根容器：主菜单 / 对局界面 / 结算界面均挂载于此
+        Scene scene = new Scene(root, Config.WIDTH, Config.HEIGHT);
+        primaryStage.setScene(scene);
+        primaryStage.show(); // 显示窗口
 
-        // 钩爪视图：颜色随当前操作玩家变化（A红 B蓝）
-        hookHead = new Circle(START_X, START_Y, HOOK_RADIUS, Color.INDIANRED);
-        hookHead.setStroke(Color.DARKRED);
-        hookHead.setStrokeWidth(2);
-        hookHead.setMouseTransparent(true);
-        root.getChildren().add(hookHead);
+        showMainMenu(root, primaryStage);
+    }
 
-        scoreA = new Text(15, 25, "");
-        scoreA.setFont(Font.font(15));
-        scoreA.setFill(Color.INDIANRED);
-        scoreB = new Text(170, 25, "");
-        scoreB.setFont(Font.font(15));
-        scoreB.setFill(Color.ROYALBLUE);
-        activeLabel = new Text(330, 25, "");
-        activeLabel.setFont(Font.font(14));
-        message = new Text(220, 55, "");
-        message.setFont(Font.font(16));
-        message.setFill(Color.DARKGREEN);
-        root.getChildren().addAll(scoreA, scoreB, activeLabel, message);
+    /** 显示主菜单（FR-32） */
+    private void showMainMenu(Pane root, Stage stage) {
+        MenuView menuView = new MenuViewImpl();
 
-        Scene scene = new Scene(root, 640, 420);
-
-        // 空格切换当前操作玩家
-        scene.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.SPACE) {
-                activeIndex = 1 - activeIndex;
-                boolean isA = activeIndex == 0;
-                hookHead.setFill(isA ? Color.INDIANRED : Color.ROYALBLUE);
-                hookHead.setStroke(isA ? Color.DARKRED : Color.NAVY);
-                flash("已切换到玩家" + players[activeIndex].getName());
-            }
+        // 点击"开始对战"：关闭主菜单，执行开局流程
+        menuView.setOnStartGame(() -> {
+            menuView.hide();
+            startGame(root);
         });
 
-        scene.setOnMouseMoved(e -> {
-            hookX = e.getX();
-            hookY = e.getY();
-            hookHead.setCenterX(hookX);
-            hookHead.setCenterY(hookY);
-            highlightCollisions();
-        });
+        // 点击"退出游戏"：关闭游戏窗口
+        menuView.setOnExit(stage::close);
 
-        // 游戏主循环：多态运动 + 结算检测
-        new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                if (carried != null) {
-                    carried.followHook(hookX, hookY);
-                    carried.updatePosition(); // 多态：各物品按自身速度跟随
-                    Group view = itemViews.get(carried);
-                    view.setTranslateX(carried.getX());
-                    view.setTranslateY(carried.getY());
+        menuView.show(root);
+    }
 
-                    // 钩爪回到起点 -> 物品结算销毁
-                    if (Math.hypot(hookX - START_X, hookY - START_Y) <= SETTLE_RADIUS) {
-                        settle();
+    /**
+     * 开局流程（FR-32）
+     * 组装模型、游戏画面（FR-28）、HUD（FR-29/FR-30）与倒计时控制器，启动对局。
+     */
+    private void startGame(Pane root) {
+        Pane gamePane = new Pane();
+        gamePane.setPrefSize(Config.WIDTH, Config.HEIGHT);
+
+        // 模型初始化（融合版：GameManagerImpl 同时实现 GameModel 接口）
+        GameModel model = new GameManagerImpl();
+        model.setRemainingTime(Config.GAME_DURATION); // 从 90 秒开始
+        model.setState(GameState.PLAYING);
+
+        // 游戏画面：Canvas + GameViewImpl（FR-28：地面/矿洞/物品/钩爪/绳索）
+        Canvas canvas = new Canvas(Config.WIDTH, Config.HEIGHT);
+        gamePane.getChildren().add(canvas);
+        GameView gameView = new GameViewImpl(canvas);
+        gameView.render(model); // 初始渲染
+
+        // HUD：顶部三栏（P1分数 | 剩余时间 | P2分数）（FR-29/FR-30）
+        HUDView hudView = new HUDViewImpl();
+        gamePane.getChildren().add(hudView.build());
+        hudView.render(model); // 初始显示
+
+        // FR-18：双人按键独立监听（View/Main 层监听 JavaFX 键盘事件，转发给 controller）
+        // S → 玩家1释放钩爪；↓ → 玩家2释放钩爪；ESC → 暂停/继续（双方共用）
+        InputController inputController = new InputControllerImpl(model);
+
+        // 暂停遮罩（挂在 gamePane 顶层覆盖游戏画面；初始隐藏）
+        PauseView pauseView = new PauseViewImpl();
+
+        Scene scene = root.getScene();
+        if (scene != null) {
+            scene.setOnKeyPressed(event -> {
+                KeyCode code = event.getCode();
+                if (code == KeyCode.S) {
+                    inputController.player1ReleaseHook();   // 玩家1：释放钩爪
+                } else if (code == KeyCode.DOWN) {
+                    inputController.player2ReleaseHook();   // 玩家2：释放钩爪
+                } else if (code == KeyCode.ESCAPE) {
+                    inputController.togglePause();
+                    // 按切换后的最新状态显示/隐藏「已暂停」遮罩
+                    if (model.getState() == GameState.PAUSED) {
+                        pauseView.show(gamePane);
+                    } else {
+                        pauseView.hide();
                     }
                 }
-                refreshHud();
+                // 其余按键本阶段忽略（道具快捷键后续接入）
+            });
+        }
+
+        // 钩子真实物理驱动：每帧由 AnimationTimer 推进 HookImpl 钟摆/抛出/收回/抓取，并重绘画面
+        // PAUSED 时 gameLoopTick 内部冻结，与 GameTimer 倒计时联动
+        final long[] lastFrameNanos = {0};
+        final AnimationTimer physicsTimer = new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                if (lastFrameNanos[0] == 0) {
+                    lastFrameNanos[0] = now;
+                    return;
+                }
+                double deltaTime = (now - lastFrameNanos[0]) / 1_000_000_000.0;
+                lastFrameNanos[0] = now;
+                // 防止窗口失焦后 deltaTime 留间过长导致物理跳变
+                if (deltaTime > 0.1) deltaTime = 0.1;
+                model.gameLoopTick(deltaTime);
+                gameView.render(model);
+                hudView.render(model);
             }
-        }.start();
+        };
+        physicsTimer.start();
 
-        stage.setTitle("黄金矿工 - 完整玩法测试");
-        stage.setScene(scene);
-        stage.show();
+        // 倒计时控制器：每秒递减 1，归零结束对局（FR-30）
+        // 注意：GameTimerImpl 的 tick 在后台线程执行，所有 UI 操作必须用
+        // Platform.runLater 切回 JavaFX Application Thread（分层约束：controller 不依赖 javafx）
+        GameTimer timer = new GameTimerImpl(model);
+        timer.setOnTick(() -> Platform.runLater(() -> hudView.render(model)));
+        timer.setOnTimeUp(() -> Platform.runLater(() -> {
+            physicsTimer.stop(); // 停止钩子物理驱动
+            showResultFlow(root, gamePane, model);
+        }));
+        timer.start();
+
+        root.getChildren().add(gamePane);
     }
 
-    /** 绘制顶部回收起点 */
-    private void drawStartPoint() {
-        Circle winch = new Circle(START_X, START_Y, 12);
-        winch.setFill(Color.STEELBLUE);
-        winch.setStroke(Color.NAVY);
-        winch.setStrokeWidth(2);
-        Text startText = new Text(START_X - 30, START_Y + 34, "回收起点");
-        startText.setFont(Font.font(13));
-        startText.setFill(Color.NAVY);
-        // 结算范围提示圈
-        Circle range = new Circle(START_X, START_Y, SETTLE_RADIUS);
-        range.setFill(Color.LIGHTBLUE);
-        range.setOpacity(0.25);
-        range.setMouseTransparent(true);
-        root.getChildren().addAll(range, winch, startText);
-    }
+    /**
+     * 倒计时归零：进入胜负判定并弹出结算界面（FR-31）。
+     * 结算界面挂在全局根容器上（覆盖对局画面）；
+     * 点击"重新开始"：关闭结算界面 → 移除旧对局画面 → 触发新一轮开局流程。
+     */
+    private void showResultFlow(Pane root, Pane gamePane, GameModel model) {
+        // 对局结束：先释放模型后台资源（钩爪收回线程池），防止反复开局累积线程
+        model.shutdown();
 
-    /** 物品生成：工厂按权重表随机生成全品类物品，位置随机 */
-    private void spawnItems() {
-        for (int i = 0; i < ITEM_COUNT; i++) {
-            double x = 50 + rnd.nextDouble() * 540;
-            double y = 140 + rnd.nextDouble() * 240;
-            Item item = itemFactory.createRandomItem(x, y); // 返回 Item，实际是子类（多态）
-            addItemView(item);
-            items.add(item);
-        }
-    }
+        ResultView resultView = new ResultViewImpl();
 
-    private void addItemView(Item item) {
-        double baseRadius = 22 + item.getWeight() * 7;
-
-        double r;
-        if (item instanceof Gold || item instanceof Stone) {
-            double size = item instanceof Gold
-                    ? 0.75 + rnd.nextDouble() * 0.55
-                    : 0.80 + rnd.nextDouble() * 0.45;
-            r = baseRadius * size;
-        } else {
-            r = baseRadius;
-        }
-
-        Node shapeNode = createView(item, r, itemShapes, itemBaseStrokes);
-
-        Shape shape = itemShapes.get(item);
-        double collisionR;
-        if (shape instanceof Polygon) {
-            collisionR = maxRadius((Polygon) shape, 0, 0);
-        } else {
-            collisionR = ((Circle) shape).getRadius();
-        }
-        itemRadii.put(item, collisionR);
-
-        Group wrap = new Group(shapeNode);
-        wrap.setTranslateX(item.getX());
-        wrap.setTranslateY(item.getY());
-
-        // 点击物品：当前玩家钩爪抓取（仅当钩爪空闲时）
-        wrap.setOnMouseClicked(e -> {
-            if (carried == null && item.isActive() && !item.isGrabbed()) {
-                item.onGrab(hooks[activeIndex]);
-                item.followHook(hookX, hookY);
-                carried = item;
-                carriedBy = players[activeIndex]; // 记录抓取者，结算只进他的账户
-                flash("玩家" + carriedBy.getName() + " 抓住了物品，拖回起点结算");
-            }
+        // 点击"重新开始"：关闭结算界面并开始新一轮对局
+        resultView.setOnRestart(() -> {
+            resultView.hide();
+            root.getChildren().remove(gamePane);
+            startGame(root);
         });
 
-        itemViews.put(item, wrap);
-        root.getChildren().add(wrap);
-    }
-
-    /** 结算：物品销毁，金币计入抓取者本人账户 */
-    private void settle() {
-        int gold = carried.getSettlementGold(); // 多态：石头重写为1金币
-        carriedBy.addGold(gold);
-
-        Group view = itemViews.remove(carried);
-        root.getChildren().remove(view);
-        items.remove(carried);
-        carried.destroy();
-
-        flash("玩家" + carriedBy.getName() + " 结算 " + (gold >= 0 ? "+" : "") + gold + " 金币");
-        carried = null;
-        carriedBy = null;
-    }
-
-    private void highlightCollisions() {
-        for (Item item : items) {
-            if (item.isGrabbed()) {
-                continue;
-            }
-            Shape shape = itemShapes.get(item);
-            boolean hit = CollisionUtil.circleCollision(
-                    hookX, hookY, HOOK_RADIUS,
-                    item.getX(), item.getY(), itemRadii.get(item));
-            shape.setStroke(hit ? Color.RED : itemBaseStrokes.get(item));
-            shape.setStrokeWidth(hit ? 4 : 2.5);
-        }
-    }
-
-    private void refreshHud() {
-        scoreA.setText("玩家A（红钩）: " + players[0].getGold() + " 金币");
-        scoreB.setText("玩家B（蓝钩）: " + players[1].getGold() + " 金币");
-        activeLabel.setText("当前: 玩家" + players[activeIndex].getName() + "，空格切换");
-        if (System.currentTimeMillis() > messageUntil) {
-            message.setText("");
-        }
-    }
-
-    private void flash(String text) {
-        message.setText(text);
-        messageUntil = System.currentTimeMillis() + 1800;
-    }
-
-    /**
-     * 按物品类型创建外形（相对坐标 0,0 绘制，由外部 Group 平移定位）：
-     * Gold=随机圆滑亮黄金块，Diamond=浅蓝切面宝石，Stone=随机圆滑蓝灰岩石，Bomb=黑球+引线+火花
-     */
-    private Node createView(Item item, double r,
-                            Map<Item, Shape> shapes, Map<Item, Color> baseStrokes) {
-        if (item instanceof Diamond) {
-            Polygon diamond = new Polygon(
-                    -r * 0.30, -r * 0.55,
-                    r * 0.30, -r * 0.55,
-                    r * 0.55, -r * 0.05,
-                    0.0, r * 0.60,
-                    -r * 0.55, -r * 0.05);
-            diamond.setFill(new LinearGradient(0, 0, 0, 1, true,
-                    CycleMethod.NO_CYCLE,
-                    new Stop(0, Color.web("#E6FBFF")),
-                    new Stop(0.5, Color.web("#8BE3F0")),
-                    new Stop(1, Color.web("#33C6DC"))));
-            Color diamondEdge = Color.web("#16A8C4");
-            diamond.setStroke(diamondEdge);
-            diamond.setStrokeWidth(2);
-
-            Polygon crownFacet = new Polygon(
-                    -r * 0.30, -r * 0.55,
-                    0, -r * 0.55,
-                    0, -r * 0.05,
-                    -r * 0.55, -r * 0.05);
-            crownFacet.setFill(Color.WHITE);
-            crownFacet.setOpacity(0.35);
-            crownFacet.setMouseTransparent(true);
-
-            Line girdle = new Line(-r * 0.55, -r * 0.05, r * 0.55, -r * 0.05);
-            girdle.setStroke(Color.WHITE);
-            girdle.setOpacity(0.6);
-            girdle.setMouseTransparent(true);
-
-            shapes.put(item, diamond);
-            baseStrokes.put(item, diamondEdge);
-            return new Group(diamond, crownFacet, girdle);
-        }
-
-        if (item instanceof Gold) {
-            Polygon gold = nugget(0, 0, r);
-            gold.setFill(new RadialGradient(0, 0.15, 0.35, 0.30, 0.9, true,
-                    CycleMethod.NO_CYCLE,
-                    new Stop(0, Color.web("#FFF9C4")),
-                    new Stop(0.55, Color.web("#FFD600")),
-                    new Stop(1, Color.web("#F0A500"))));
-            Color goldEdge = Color.web("#B8860B");
-            gold.setStroke(goldEdge);
-            gold.setStrokeWidth(2.5);
-
-            Circle shine = new Circle(
-                    -r * (0.20 + rnd.nextDouble() * 0.20),
-                    -r * (0.28 + rnd.nextDouble() * 0.18),
-                    r * (0.12 + rnd.nextDouble() * 0.07), Color.WHITE);
-            shine.setOpacity(0.55);
-            shine.setMouseTransparent(true);
-
-            shapes.put(item, gold);
-            baseStrokes.put(item, goldEdge);
-            return new Group(gold, shine);
-        }
-
-        if (item instanceof Stone) {
-            Polygon stone = rock(0, 0, r);
-            stone.setFill(new RadialGradient(0, 0.2, 0.35, 0.30, 0.9, true,
-                    CycleMethod.NO_CYCLE,
-                    new Stop(0, Color.web("#D2DBE4")),
-                    new Stop(1, Color.web("#7E8FA0"))));
-            Color stoneEdge = Color.web("#5D6B7A");
-            stone.setStroke(stoneEdge);
-            stone.setStrokeWidth(2.5);
-
-            double m = 0.9 + rnd.nextDouble() * 0.2;
-            QuadCurve mark1 = new QuadCurve(
-                    r * 0.12 * m, -r * 0.28,
-                    r * 0.52, -r * 0.08 * m,
-                    r * 0.18, r * 0.18);
-            mark1.setStroke(stoneEdge);
-            mark1.setStrokeWidth(2);
-            mark1.setFill(null);
-            mark1.setOpacity(0.65);
-            mark1.setMouseTransparent(true);
-
-            QuadCurve mark2 = new QuadCurve(
-                    r * 0.28, r * 0.28 * m,
-                    r * 0.58 * m, r * 0.42,
-                    r * 0.32, r * 0.58);
-            mark2.setStroke(stoneEdge);
-            mark2.setStrokeWidth(2);
-            mark2.setFill(null);
-            mark2.setOpacity(0.55);
-            mark2.setMouseTransparent(true);
-
-            shapes.put(item, stone);
-            baseStrokes.put(item, stoneEdge);
-            return new Group(stone, mark1, mark2);
-        }
-
-        // Bomb：黑色球体 + 棕色引线 + 橙色火花
-        Circle body = new Circle(0, 0, r * 0.85);
-        body.setFill(new RadialGradient(0, 0, 0.3, 0.3, 1, true,
-                CycleMethod.NO_CYCLE,
-                new Stop(0, Color.DIMGRAY),
-                new Stop(1, Color.BLACK)));
-        body.setStroke(Color.DARKRED);
-        body.setStrokeWidth(2);
-
-        Line fuse = new Line(r * 0.35, -r * 0.75, r * 0.7, -r * 1.15);
-        fuse.setStroke(Color.SADDLEBROWN);
-        fuse.setStrokeWidth(3);
-        fuse.setMouseTransparent(true);
-
-        Circle spark = new Circle(r * 0.7, -r * 1.15, 4, Color.ORANGE);
-        spark.setMouseTransparent(true);
-
-        shapes.put(item, body);
-        baseStrokes.put(item, Color.DARKRED);
-        return new Group(body, fuse, spark);
-    }
-
-    /**
-     * 随机但圆滑的金块轮廓：3 个低频正弦波叠加 + 56 个采样点
-     */
-    private Polygon nugget(double cx, double cy, double r) {
-        int waves = 3;
-        int[] freq = new int[waves];
-        double[] amp = new double[waves];
-        double[] phase = new double[waves];
-        for (int i = 0; i < waves; i++) {
-            freq[i] = 2 + rnd.nextInt(4);
-            amp[i] = 0.15 / (i + 1) + rnd.nextDouble() * 0.05;
-            phase[i] = rnd.nextDouble() * Math.PI * 2;
-        }
-        Polygon poly = new Polygon();
-        int steps = 56;
-        for (int i = 0; i < steps; i++) {
-            double a = Math.PI * 2 * i / steps;
-            double k = 0.92;
-            for (int w = 0; w < waves; w++) {
-                k += amp[w] * Math.cos(freq[w] * a + phase[w]);
-            }
-            poly.getPoints().addAll(cx + r * k * Math.cos(a), cy + r * k * Math.sin(a));
-        }
-        return poly;
-    }
-
-    /**
-     * 随机但圆滑的岩石轮廓：低频正弦波叠加 + 顶部平滑收窄
-     */
-    private Polygon rock(double cx, double cy, double r) {
-        int waves = 3;
-        int[] freq = new int[waves];
-        double[] amp = new double[waves];
-        double[] phase = new double[waves];
-        for (int i = 0; i < waves; i++) {
-            freq[i] = 2 + rnd.nextInt(3);
-            amp[i] = 0.10 / (i + 1) + rnd.nextDouble() * 0.04;
-            phase[i] = rnd.nextDouble() * Math.PI * 2;
-        }
-        Polygon poly = new Polygon();
-        int steps = 56;
-        for (int i = 0; i < steps; i++) {
-            double a = Math.PI * 2 * i / steps;
-            double k = 0.90;
-            for (int w = 0; w < waves; w++) {
-                k += amp[w] * Math.cos(freq[w] * a + phase[w]);
-            }
-            // 顶部（a=-PI/2 附近）平滑收窄形成圆润尖顶
-            double topWeight = Math.max(0, Math.cos(a + Math.PI / 2));
-            topWeight = topWeight * topWeight;
-            k *= 1 - 0.22 * topWeight;
-            poly.getPoints().addAll(cx + r * k * Math.cos(a), cy + r * k * Math.sin(a));
-        }
-        return poly;
-    }
-
-    /** 计算多边形顶点中距中心最远的距离，用作碰撞半径 */
-    private double maxRadius(Polygon poly, double cx, double cy) {
-        double max = 0;
-        var points = poly.getPoints();
-        for (int i = 0; i < points.size(); i += 2) {
-            double dx = points.get(i) - cx;
-            double dy = points.get(i + 1) - cy;
-            max = Math.max(max, Math.sqrt(dx * dx + dy * dy));
-        }
-        return max;
+        // 胜负判定与渲染由 ResultView 内部完成（读取双方最终分数）
+        resultView.show(root, model);
+        System.out.println("[FR-31] 时间到，进入结算：玩家1=$" + model.getPlayer1().getScore()
+                + "，玩家2=$" + model.getPlayer2().getScore());
     }
 
     public static void main(String[] args) {
