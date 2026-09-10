@@ -1,12 +1,11 @@
 package com.dz.hello.Main;
 
 import com.dz.hello.Main.model.Player;
-import com.dz.hello.Main.model.entity.Bomb;
-import com.dz.hello.Main.model.entity.Diamond;
-import com.dz.hello.Main.model.entity.Gold;
-import com.dz.hello.Main.model.entity.Item;
-import com.dz.hello.Main.model.entity.ItemFactory;
-import com.dz.hello.Main.model.entity.Stone;
+import com.dz.hello.Main.model.Diamond;
+import com.dz.hello.Main.model.Gold;
+import com.dz.hello.Main.model.Item;
+import com.dz.hello.Main.model.ItemFactory;
+import com.dz.hello.Main.model.Stone;
 import com.dz.hello.Main.util.CollisionUtil;
 import com.dz.hello.controller.hook.IHook;
 import javafx.animation.AnimationTimer;

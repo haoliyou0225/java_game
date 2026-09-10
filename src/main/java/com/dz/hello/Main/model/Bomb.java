@@ -1,4 +1,4 @@
-package com.dz.hello.Main.model.entity;
+package com.dz.hello.Main.model;
 
 import com.dz.hello.controller.hook.IHook;
 
