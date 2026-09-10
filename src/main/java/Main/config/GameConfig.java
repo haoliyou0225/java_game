@@ -22,6 +22,10 @@ public final class GameConfig {
     public static final int GAME_TOTAL_SEC = 90;
     /** 地图左右半区最大允许价值差百分比 */
     public static final int MAP_MAX_VALUE_DIFF_PERCENT = 5;
+    /** 特殊物品（福袋/炸弹）两侧数量最大允许差值 */
+    public static final int MAP_SPECIAL_ITEM_MAX_DIFF = 1;
+    /** 地图公平性校验最大重试次数（避免死循环） */
+    public static final int MAP_FAIRNESS_MAX_RETRY = 50;
 
     // 钩子锚点（渲染与碰撞共用，双钩左右分置）
     // 已对齐 UI 大画布（1280x720）：与 Config.HOOK1_START_X / HOOK2_START_X / HOOK_START_Y 保持一致
