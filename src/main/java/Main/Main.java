@@ -3,11 +3,15 @@ package Main;
 
 import Main.config.GameConfig;
 import Main.controller.GameManager;
+import Main.controller.GameManagerImpl;
 import Main.controller.InputAction;
 import Main.controller.InputHandler;
+import Main.controller.InputHandlerImpl;
 import Main.model.GameStage;
 import Main.view.GameMenu;
+import Main.view.GameMenuImpl;
 import Main.view.GameUI;
+import Main.view.GameUIImpl;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -30,10 +34,10 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) {
         canvas = new Canvas(GameConfig.WINDOW_WIDTH, GameConfig.WINDOW_HEIGHT);
-        gameUI = new GameUI(canvas);
-        gameMenu = new GameMenu(canvas);
-        gameManager = new GameManager();
-        inputHandler = new InputHandler();
+        gameUI = new GameUIImpl(canvas);
+        gameMenu = new GameMenuImpl(canvas);
+        gameManager = new GameManagerImpl();
+        inputHandler = new InputHandlerImpl();
 
         StackPane root = new StackPane(canvas);
         Scene scene = new Scene(root, GameConfig.WINDOW_WIDTH, GameConfig.WINDOW_HEIGHT);
