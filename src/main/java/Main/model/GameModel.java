@@ -51,6 +51,13 @@ public interface GameModel {
     void shutdown();
 
     /**
+     * 从场景移除物品（玩家按炸药键炸毁钩上携带物时调用）。
+     *
+     * @param item 被炸毁的物品
+     */
+    void removeItem(Item item);
+
+    /**
      * 胜负判定（FR-31）：比较双方最终分数。
      * 业务规则下沉到 Model 层，View 层仅负责文案与颜色渲染。
      *

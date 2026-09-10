@@ -174,4 +174,15 @@ public class GameModelImpl implements GameModel {
     public void shutdown() {
         hookRetrieveExecutor.shutdownNow();
     }
+
+    /**
+     * 从场景移除物品（玩家按炸药键炸毁钩上携带物时调用）。
+     * 注意：本类已被融合版 GameManagerImpl 取代，仅保留接口实现以维持编译。
+     */
+    @Override
+    public void removeItem(Item item) {
+        if (item != null) {
+            sceneItems.remove(item);
+        }
+    }
 }

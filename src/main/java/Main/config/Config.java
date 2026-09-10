@@ -16,8 +16,8 @@ public final class Config {
     public static final double GAME_DURATION = 90;
     public static final double HOOK1_START_X = 320;
     public static final double HOOK2_START_X = 960;
-    /** 钩爪起点 Y（顶部地面下缘，HUD 下方），钩爪向下抓取 */
-    public static final double HOOK_START_Y = 150;
+    /** 钩爪起点 Y（地面条内，与 GameConfig.HOOK_ANCHOR_Y 对齐），钩爪向下抓取 */
+    public static final double HOOK_START_Y = 80;
     /** HUD 顶部信息栏高度（FR-29/FR-30），GameView 地面条上沿与之对齐 */
     public static final double HUD_HEIGHT = 90;
 }

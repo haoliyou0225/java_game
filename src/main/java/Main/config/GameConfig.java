@@ -24,27 +24,57 @@ public final class GameConfig {
     public static final int MAP_MAX_VALUE_DIFF_PERCENT = 5;
 
     // 钩子锚点（渲染与碰撞共用，双钩左右分置）
-    // 已对齐 UI 大画布（1280x720）：与 Config.HOOK1_START_X / HOOK2_START_X / HOOK_START_Y 保持一致
-    /** P1 钩子锚点 X 坐标（与 Config.HOOK1_START_X 对齐） */
+    // 规格：P1 锚点 (320,80)、P2 锚点 (960,80)，初始摆动方向相反
+    /** P1 钩子锚点 X 坐标 */
     public static final double HOOK_ANCHOR_X_P1 = 320;
-    /** P2 钩子锚点 X 坐标（与 Config.HOOK2_START_X 对齐） */
+    /** P2 钩子锚点 X 坐标 */
     public static final double HOOK_ANCHOR_X_P2 = 960;
-    /** 钩子锚点 Y 坐标（顶部地面下缘，与 Config.HOOK_START_Y 对齐） */
-    public static final double HOOK_ANCHOR_Y = 150;
+    /** 钩子锚点 Y 坐标（地面条内） */
+    public static final double HOOK_ANCHOR_Y = 80;
 
-    // 钩子物理模块专属配置 完全对齐人员2 FR需求
-    /** 钩子钟摆摆动速度（弧度/秒） */
+    // 矿洞活动边界（钩爪触达边界自动触发空钩收回）
+    /** 矿洞左边界 X */
+    public static final double MINE_MIN_X = 50;
+    /** 矿洞右边界 X */
+    public static final double MINE_MAX_X = 1230;
+    /** 矿洞下边界 Y */
+    public static final double MINE_MAX_Y = 660;
+
+    // 钩子物理模块专属配置
+    /** 钩子钟摆摆动角速度（弧度/秒，固定 1.5） */
     public static final double HOOK_SWING_SPEED = 1.5;
-    /** 绳索最大延伸长度 单位像素（锚点Y=150 → 画布底720，留余量 580 让钩能抓到矿洞底部） */
-    public static final double ROPE_MAX_EXTEND_LENGTH = 580;
-    /** 空钩收回速度 像素/秒 */
-    public static final double HOOK_EMPTY_RETRACT_SPEED = 600;
-    /** 带物品基础收回速度 像素/秒 */
-    public static final double HOOK_WITH_ITEM_BASE_RETRACT_SPEED = 200;
+    /** 钟摆幅度限制（相对垂直向下 ±1.25 弧度） */
+    public static final double HOOK_SWING_MAX_OFFSET = 1.25;
+    /** 绳索最大延伸长度 单位像素（≥1150 覆盖全矿洞对角） */
+    public static final double ROPE_MAX_EXTEND_LENGTH = 1150;
+    /** 钩爪直线抛出速度（像素/秒，固定 500） */
+    public static final double HOOK_THROW_SPEED = 500;
+    /** 空钩收回速度（像素/秒，固定 800，显著快于带物品） */
+    public static final double HOOK_EMPTY_RETRACT_SPEED = 800;
+
+    // 携带物品收回：严格按重量档位，收回速度 = 抓取瞬间绳长 / 档位耗时
+    /** 轻档重量上限（weight ≤ 1.2：金块/钻石/鼹鼠） */
+    public static final double WEIGHT_LIGHT_MAX = 1.2;
+    /** 中档重量上限（1.2 < weight ≤ 2.5：福袋/炸弹） */
+    public static final double WEIGHT_MEDIUM_MAX = 2.5;
+    /** 轻档完成收回耗时（秒） */
+    public static final double RETRACT_TIME_LIGHT = 1.2;
+    /** 中档完成收回耗时（秒） */
+    public static final double RETRACT_TIME_MEDIUM = 2.5;
+    /** 重档完成收回耗时（秒）（石头/大金块） */
+    public static final double RETRACT_TIME_HEAVY = 5.0;
+
+    /** 双钩抢夺/碰撞眩晕持续时长（秒） */
+    public static final double HOOK_STUN_DURATION_SEC = 2.0;
+    /** 双钩抢夺判定时间窗口（毫秒） */
+    public static final long HOOK_STEAL_WINDOW_MS = 50;
+    /** 鼹鼠偏转角度下限（度） */
+    public static final double MOLE_DEFLECT_MIN_DEG = 15;
+    /** 鼹鼠偏转角度上限（度） */
+    public static final double MOLE_DEFLECT_MAX_DEG = 30;
+
     /** 冰冻效果持续时长 单位秒 */
     public static final int HOOK_FREEZE_DURATION_SEC = 3;
-    /** 双钩抢同一物品停滞惩罚时长 单位秒 */
-    public static final int HOOK_STUN_DURATION_SEC = 2;
     /** 强力药水收回速度倍率 */
     public static final double HOOK_SPEED_BOOST_MULTIPLIER = 2.0;
     /** 强力药水效果持续时长 单位秒 */
@@ -55,8 +85,8 @@ public final class GameConfig {
     public static final int PLAYER_INIT_DYNAMITE_COUNT = 1;
     /** 玩家炸药库存上限 */
     public static final int PLAYER_MAX_DYNAMITE_COUNT = 3;
-    /** TNT爆炸半径 单位像素 */
-    public static final int TNT_EXPLOSION_RADIUS = 300;
+    /** TNT爆炸半径 单位像素（规格：150，不计分/不扣金币/不眩晕） */
+    public static final int TNT_EXPLOSION_RADIUS = 150;
     /** 福袋最小随机金币 */
     public static final int MYSTERY_BAG_MIN_GOLD = 100;
     /** 福袋最大随机金币 */

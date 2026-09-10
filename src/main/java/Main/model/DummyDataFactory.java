@@ -199,5 +199,14 @@ public final class DummyDataFactory {
         @Override public double getY() { return y; }
         @Override public double getStartX() { return startX; }
         @Override public double getStartY() { return startY; }
+
+        // ===== 抢夺/眩晕/炸药（假实现，空操作/默认值） =====
+        @Override public Item getGrabbedItem() { return null; }
+        @Override public boolean tipHits(Item item) { return false; }
+        @Override public long getGrabTimestampMs() { return 0L; }
+        @Override public double getGrabOriginX() { return 0; }
+        @Override public double getGrabOriginY() { return 0; }
+        @Override public void stun() { }
+        @Override public Item detachCarriedItem() { return null; }
     }
 }

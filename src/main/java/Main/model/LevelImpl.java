@@ -12,15 +12,20 @@ public class LevelImpl implements Level {
     /** 场景物品数量 */
     private static final int SCENE_ITEM_COUNT = 10;
     /** 物品距锚点最近距离（像素） */
-    private static final double ITEM_MIN_DIST = 100;
-    /** 物品距锚点最远距离（像素，需小于绳索最大长度） */
-    private static final double ITEM_MAX_DIST = 420;
+    private static final double ITEM_MIN_DIST = 120;
+    /** 物品距锚点最远距离（像素，绳长 1150 可覆盖；物品主要分布在矿洞中下部） */
+    private static final double ITEM_MAX_DIST = 620;
     /** 物品角度相对垂直向下的最大偏移（弧度，朝内侧，需小于钩子摆动范围 1.25） */
     private static final double ITEM_ANGLE_MAX_OFFSET = 1.25;
     /** 物品角度朝画布外侧的最大偏移（弧度，按画布边界收窄防止出界） */
     private static final double ITEM_ANGLE_EDGE_OFFSET = 0.65;
     /** 物品 Y 坐标起始基准：与钩子锚点 Y 对齐，物品从锚点正下方开始分布 */
     private static final double ITEM_Y_OFFSET = GameConfig.HOOK_ANCHOR_Y;
+    /** 物品分布区域钳制（矿洞内，避免被地面条遮挡或贴边） */
+    private static final double BOUND_X_MIN = 70;
+    private static final double BOUND_X_MAX = 1210;
+    private static final double BOUND_Y_MIN = 165;
+    private static final double BOUND_Y_MAX = 640;
 
     private List<Item> itemPool;
 
@@ -46,6 +51,9 @@ public class LevelImpl implements Level {
             double a = Math.PI / 2 + low + rnd.nextDouble() * (high - low);
             double x = centerX + Math.cos(a) * dist;
             double y = ITEM_Y_OFFSET + Math.sin(a) * dist;
+            // 钳制到矿洞可视区域，防止物品被地面条遮挡或贴边界
+            x = Math.max(BOUND_X_MIN, Math.min(BOUND_X_MAX, x));
+            y = Math.max(BOUND_Y_MIN, Math.min(BOUND_Y_MAX, y));
             itemPool.add(createRandomItem(rnd, x, y));
         }
         return itemPool;

@@ -5,6 +5,8 @@ import Main.model.GameModel;
 import Main.model.GameState;
 import Main.model.Hook;
 import Main.model.HookState;
+import Main.model.Item;
+import Main.model.Player;
 import Main.util.LogUtils;
 
 /**
@@ -49,6 +51,50 @@ public class InputControllerImpl implements InputController {
     @Override
     public void player2ReleaseHook() {
         releaseHook(model.getHook2(), "玩家2");
+    }
+
+    /**
+     * 玩家1引爆炸药（按键 W）：PLAYING + GRABBING + 有库存时，
+     * 炸毁钩上携带物（从场景移除）、钩爪立即空钩收回、库存减 1。
+     */
+    @Override
+    public void player1UseDynamite() {
+        useDynamite(model.getHook1(), model.getPlayer1(), "玩家1");
+    }
+
+    /**
+     * 玩家2引爆炸药（按键 ↑），与玩家1完全对称。
+     */
+    @Override
+    public void player2UseDynamite() {
+        useDynamite(model.getHook2(), model.getPlayer2(), "玩家2");
+    }
+
+    /**
+     * 引爆炸药公共流程（规格 FR 炸药键）。
+     * 条件链：对局中 → 钩爪正在携带物品（GRABBING）→ 炸药库存 > 0；
+     * 满足后：hook.detachCarriedItem() 让钩爪立即空钩收回并返回携带物，
+     * 玩家库存减 1，物品从场景移除（不计分）。
+     */
+    private void useDynamite(Hook hook, Player player, String playerLabel) {
+        if (model.getState() != GameState.PLAYING) {
+            return;
+        }
+        if (hook == null || hook.getState() != HookState.GRABBING) {
+            return;
+        }
+        if (player.getDynamiteCount() <= 0) {
+            System.out.println(LogUtils.format(playerLabel + " 炸药库存不足"));
+            return;
+        }
+        Item carried = hook.detachCarriedItem();
+        if (carried == null) {
+            return;
+        }
+        player.useDynamite();
+        model.removeItem(carried);
+        System.out.println(LogUtils.format(playerLabel + " 引爆炸药，炸毁物品，剩余炸药: "
+                + player.getDynamiteCount()));
     }
 
     /**

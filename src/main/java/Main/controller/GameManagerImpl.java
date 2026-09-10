@@ -108,6 +108,9 @@ public class GameManagerImpl implements GameManager, GameModel {
         hookP1.update(deltaTime, sceneItemList, hookP2);
         hookP2.update(deltaTime, sceneItemList, hookP1);
 
+        // 1.5 双钩交互：50ms 抢夺窗口判定 + 钩尖直接相撞 → 双方 STUNNED 2 秒
+        resolveHookConflict();
+
         // 2. 物品位置更新 + 携带物品收回完成时结算分数
         List<Item> settled = new ArrayList<>();
         for (Item item : sceneItemList) {
@@ -165,6 +168,77 @@ public class GameManagerImpl implements GameManager, GameModel {
         if (hookP1.ownsItem(item)) return 1;
         if (hookP2.ownsItem(item)) return 2;
         return 1;
+    }
+
+    /**
+     * 双钩冲突裁决（规格 FR-12）：
+     * 1) 抢夺：双钩在 ≤50ms 窗口命中同一物品 → 物品弹回原位，双方在碰撞点 STUNNED 2 秒
+     * 2) 钩尖直接相撞：双方 STUNNED 2 秒，携带中的物品在当前点松脱落回矿洞
+     * STUNNED 期间不再重复触发（避免眩晕计时被刷新导致永远无法恢复）
+     */
+    private void resolveHookConflict() {
+        // 已眩晕的钩子冻结在碰撞点，不参与新的冲突判定
+        if (hookP1.getState() == HookState.STUNNED || hookP2.getState() == HookState.STUNNED) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        Item i1 = hookP1.getGrabbedItem();
+        Item i2 = hookP2.getGrabbedItem();
+
+        // === 抢夺判定：同一物品在 50ms 窗口内被双钩命中 ===
+        Item stolen = null;
+        if (i1 != null && i1 == i2) {
+            stolen = i1;
+        } else if (i1 != null
+                && hookP2.getState() == HookState.THROWING
+                && hookP2.tipHits(i1)
+                && now - hookP1.getGrabTimestampMs() <= GameConfig.HOOK_STEAL_WINDOW_MS) {
+            stolen = i1;
+        } else if (i2 != null
+                && hookP1.getState() == HookState.THROWING
+                && hookP1.tipHits(i2)
+                && now - hookP2.getGrabTimestampMs() <= GameConfig.HOOK_STEAL_WINDOW_MS) {
+            stolen = i2;
+        }
+
+        if (stolen != null) {
+            // 物品弹回被抓取前的原位
+            stolen.setGrabbed(false);
+            stolen.setX(hookP1.ownsItem(stolen) ? hookP1.getGrabOriginX() : hookP2.getGrabOriginX());
+            stolen.setY(hookP1.ownsItem(stolen) ? hookP1.getGrabOriginY() : hookP2.getGrabOriginY());
+            // 双方在碰撞点停滞 2 秒，之后自动空钩收回起点恢复摇摆
+            hookP1.stun();
+            hookP2.stun();
+            return;
+        }
+
+        // === 钩尖直接相撞（双钩均已伸出矿洞时才判定，钟摆状态相距 640px 不可能相碰） ===
+        boolean extended1 = hookP1.getRopeLength() > 80;
+        boolean extended2 = hookP2.getRopeLength() > 80;
+        if (extended1 && extended2 && hookP1.checkCollisionOtherHook(hookP2)) {
+            // 携带中的物品在当前碰撞点松脱，落回矿洞（保持可再抓取）
+            releaseCarriedAtCurrentPoint(hookP1);
+            releaseCarriedAtCurrentPoint(hookP2);
+            hookP1.stun();
+            hookP2.stun();
+        }
+    }
+
+    /** 眩晕时松开携带物品：物品留在钩尖当前坐标，恢复未抓取状态可被再次抓取 */
+    private void releaseCarriedAtCurrentPoint(Hook hook) {
+        Item carried = hook.getGrabbedItem();
+        if (carried != null) {
+            carried.setGrabbed(false);
+        }
+    }
+
+    /** 从场景移除物品（炸药炸毁钩上携带物时调用） */
+    @Override
+    public void removeItem(Item item) {
+        if (item != null) {
+            sceneItemList.remove(item);
+        }
     }
 
     // ===== GameManager Getter =====

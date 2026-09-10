@@ -22,6 +22,17 @@ public interface InputController {
     void player2ReleaseHook();
 
     /**
+     * 玩家1引爆炸药（按键 W）：炸毁当前钩上携带的物品，钩爪立即空钩收回，炸药库存减 1。
+     * 仅在对局进行中、钩爪处于 GRABBING 携带状态、且炸药库存 > 0 时生效。
+     */
+    void player1UseDynamite();
+
+    /**
+     * 玩家2引爆炸药（按键 ↑）：逻辑与玩家1完全对称独立。
+     */
+    void player2UseDynamite();
+
+    /**
      * 暂停/恢复对局（按键 ESC，双方共用，FR-19）。
      * PLAYING 与 PAUSED 之间互相切换；READY/FINISHED 状态下忽略。
      * 倒计时与钩爪收回的冻结由各自持有方监听 GameState 实现。

@@ -104,8 +104,12 @@ public class Main extends Application {
                 KeyCode code = event.getCode();
                 if (code == KeyCode.S) {
                     inputController.player1ReleaseHook();   // 玩家1：释放钩爪
+                } else if (code == KeyCode.W) {
+                    inputController.player1UseDynamite();   // 玩家1：引爆炸药（炸毁钩上物品）
                 } else if (code == KeyCode.DOWN) {
                     inputController.player2ReleaseHook();   // 玩家2：释放钩爪
+                } else if (code == KeyCode.UP) {
+                    inputController.player2UseDynamite();   // 玩家2：引爆炸药（炸毁钩上物品）
                 } else if (code == KeyCode.ESCAPE) {
                     inputController.togglePause();
                     // 按切换后的最新状态显示/隐藏「已暂停」遮罩
