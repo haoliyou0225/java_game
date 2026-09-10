@@ -20,8 +20,16 @@ public final class GameConfig {
     // 对局全局配置
     /** 游戏总时长（秒） */
     public static final int GAME_TOTAL_SEC = 90;
-    /** 地图左右半区最大允许价值差百分比 */
+    /** 地图左右半区最大允许价值差百分比（FR-01：≤5%） */
     public static final int MAP_MAX_VALUE_DIFF_PERCENT = 5;
+    /** FR-01 每局物品数量下限 */
+    public static final int SCENE_ITEM_MIN_COUNT = 25;
+    /** FR-01 每局物品数量上限 */
+    public static final int SCENE_ITEM_MAX_COUNT = 30;
+    /** FR-01 左右半区福袋数量最大差值（≤1） */
+    public static final int MAP_BAG_MAX_DIFF = 1;
+    /** FR-01 公平性校验最大重试次数（耗尽则取价值差最小的兜底方案） */
+    public static final int MAP_FAIRNESS_MAX_RETRY = 300;
 
     // 钩子锚点（渲染与碰撞共用，双钩左右分置）
     // 规格：P1 锚点 (320,80)、P2 锚点 (960,80)，初始摆动方向相反

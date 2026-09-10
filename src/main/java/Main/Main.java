@@ -144,16 +144,27 @@ public class Main extends Application {
         };
         physicsTimer.start();
 
-        // 倒计时控制器：每秒递减 1，归零结束对局（FR-30）
+        // 倒计时控制器：每秒递减 1，归零结束对局（FR-10）
         // 注意：GameTimerImpl 的 tick 在后台线程执行，所有 UI 操作必须用
         // Platform.runLater 切回 JavaFX Application Thread（分层约束：controller 不依赖 javafx）
         GameTimer timer = new GameTimerImpl(model);
-        timer.setOnTick(() -> Platform.runLater(() -> hudView.render(model)));
-        timer.setOnTimeUp(() -> Platform.runLater(() -> {
+        // 结束流程幂等保护：倒计时归零(FR-10)与物品清空(FR-08)可能竞争，只允许进入一次结算
+        final boolean[] ended = {false};
+        Runnable enterResult = () -> {
+            if (ended[0]) return;
+            ended[0] = true;
             physicsTimer.stop(); // 停止钩子物理驱动
             showResultFlow(root, gamePane, model);
-        }));
+        };
+        timer.setOnTick(() -> Platform.runLater(() -> hudView.render(model)));
+        timer.setOnTimeUp(() -> Platform.runLater(enterResult));
         timer.start();
+
+        // FR-08 自动结束：场上物品清空且双钩均回 SWINGING 时模型立即回调（在 FX 线程触发，可直接操作 UI）
+        model.setOnGameEnd(() -> {
+            timer.stop();
+            enterResult.run();
+        });
 
         root.getChildren().add(gamePane);
     }

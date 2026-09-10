@@ -185,4 +185,12 @@ public class GameModelImpl implements GameModel {
             sceneItems.remove(item);
         }
     }
+
+    /**
+     * FR-08 自动结束回调：本类已被 GameManagerImpl 取代，仅空实现以维持接口编译。
+     */
+    @Override
+    public void setOnGameEnd(Runnable action) {
+        // no-op：GameManagerImpl 才是 Main.java 实际装配的模型
+    }
 }
