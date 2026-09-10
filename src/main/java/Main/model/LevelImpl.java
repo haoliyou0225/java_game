@@ -9,8 +9,6 @@ import java.util.Random;
 
 public class LevelImpl implements Level {
 
-    /** 场景物品数量 */
-    private static final int SCENE_ITEM_COUNT = 10;
     /** 物品距锚点最近距离（像素） */
     private static final double ITEM_MIN_DIST = 100;
     /** 物品距锚点最远距离（像素，需小于绳索最大长度） */
@@ -33,7 +31,9 @@ public class LevelImpl implements Level {
     public List<Item> generateSceneItems() {
         Random rnd = new Random();
         itemPool = new ArrayList<>();
-        for (int i = 0; i < SCENE_ITEM_COUNT; i++) {
+        int itemCount = GameConfig.SCENE_ITEM_MIN_COUNT
+                + rnd.nextInt(GameConfig.SCENE_ITEM_MAX_COUNT - GameConfig.SCENE_ITEM_MIN_COUNT + 1);
+        for (int i = 0; i < itemCount; i++) {
             // 随机选择一个钩子锚点作为分布圆心
             boolean leftSide = rnd.nextBoolean();
             double centerX = leftSide

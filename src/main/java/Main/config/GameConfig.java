@@ -50,6 +50,12 @@ public final class GameConfig {
     /** 强力药水效果持续时长 单位秒 */
     public static final int HOOK_SPEED_BOOST_DURATION_SEC = 10;
 
+    // 关卡场景物品数量配置（FR-13）
+    /** 场景物品最小数量 */
+    public static final int SCENE_ITEM_MIN_COUNT = 25;
+    /** 场景物品最大数量 */
+    public static final int SCENE_ITEM_MAX_COUNT = 30;
+
     // 物品模块跨模块公共配置 对齐人员3 FR需求
     /** 玩家初始炸药数量 */
     public static final int PLAYER_INIT_DYNAMITE_COUNT = 1;
