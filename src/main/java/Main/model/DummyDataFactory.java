@@ -208,5 +208,16 @@ public final class DummyDataFactory {
         @Override public double getGrabOriginY() { return 0; }
         @Override public void stun() { }
         @Override public Item detachCarriedItem() { return null; }
+        // FR-16 冰冻箱 / 强力药水（假实现，空操作/默认值）
+        @Override public void freeze(double seconds) { }
+        @Override public boolean isFrozen() { return false; }
+        @Override public double getFreezeRemaining() { return 0; }
+        @Override public void applySpeedBoost(double seconds) { }
+        @Override public boolean isSpeedBoostActive() { return false; }
+        @Override public double getSpeedBoostRemaining() { return 0; }
+        // 结算飘字（DummyHook 不产生飘字）
+        @Override public String getSettleLabel() { return null; }
+        @Override public long getSettleLabelUntil() { return 0; }
+        @Override public Main.config.GameConfig.MysteryReward getSettleIcon() { return null; }
     }
 }

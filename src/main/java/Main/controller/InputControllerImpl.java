@@ -1,6 +1,7 @@
 // FR-UI InputControllerImpl：双人输入实现（状态校验→置 THROWING→模拟收回，暂停切换），来自 feature_ui 分支
 package Main.controller;
 
+import Main.config.GameConfig;
 import Main.model.GameModel;
 import Main.model.GameState;
 import Main.model.Hook;
@@ -68,6 +69,72 @@ public class InputControllerImpl implements InputController {
     @Override
     public void player2UseDynamite() {
         useDynamite(model.getHook2(), model.getPlayer2(), "玩家2");
+    }
+
+    /** 玩家1强力药水（按键 A，FR-16）：消耗库存，自身钩爪收回×2 持续 10 秒 */
+    @Override
+    public void player1UsePowerPotion() {
+        usePowerPotion(model.getHook1(), model.getPlayer1(), "玩家1");
+    }
+
+    /** 玩家2强力药水（按键 Num1），与玩家1完全对称 */
+    @Override
+    public void player2UsePowerPotion() {
+        usePowerPotion(model.getHook2(), model.getPlayer2(), "玩家2");
+    }
+
+    /** 玩家1冰冻箱（按键 D，FR-15）：仅对玩家2钩爪生效，冻结 3 秒 */
+    @Override
+    public void player1UseFreezeBox() {
+        useFreezeBox(model.getHook2(), model.getPlayer1(), "玩家1");
+    }
+
+    /** 玩家2冰冻箱（按键 Num2）：仅对玩家1钩爪生效 */
+    @Override
+    public void player2UseFreezeBox() {
+        useFreezeBox(model.getHook1(), model.getPlayer2(), "玩家2");
+    }
+
+    /**
+     * 强力药水公共流程（FR-16/FR-18）：
+     * 对局中 + 库存 > 0 → 库存减 1，钩爪收回速度 ×2 持续 POWER_POTION_DURATION_SEC 秒；
+     * 已生效时再次使用仅刷新剩余时长（倍率不叠加，由 HookImpl 保证）。
+     */
+    private void usePowerPotion(Hook hook, Player player, String playerLabel) {
+        if (model.getState() != GameState.PLAYING) {
+            return;
+        }
+        if (hook == null) {
+            return;
+        }
+        if (!player.consumePowerPotion()) {
+            System.out.println(LogUtils.format(playerLabel + " 强力药水库存不足"));
+            return;
+        }
+        hook.applySpeedBoost(GameConfig.POWER_POTION_DURATION_SEC);
+        System.out.println(LogUtils.format(playerLabel + " 使用强力药水，收回速度×2 持续 10 秒，剩余库存: "
+                + player.getPowerPotionCount()));
+    }
+
+    /**
+     * 冰冻箱公共流程（FR-15/FR-16）：
+     * 对局中 + 库存 > 0 → 库存减 1，对方钩爪进入 FROZEN 冻结 HOOK_FREEZE_DURATION_SEC 秒。
+     * 冰冻箱只能作用于对方钩爪（调用方传入的即对钩）。
+     */
+    private void useFreezeBox(Hook opponentHook, Player player, String playerLabel) {
+        if (model.getState() != GameState.PLAYING) {
+            return;
+        }
+        if (opponentHook == null) {
+            return;
+        }
+        if (!player.consumeFreezeBox()) {
+            System.out.println(LogUtils.format(playerLabel + " 冰冻箱库存不足"));
+            return;
+        }
+        opponentHook.freeze(GameConfig.HOOK_FREEZE_DURATION_SEC);
+        System.out.println(LogUtils.format(playerLabel + " 使用冰冻箱，对方钩爪冻结 3 秒，剩余库存: "
+                + player.getFreezeBoxCount()));
     }
 
     /**

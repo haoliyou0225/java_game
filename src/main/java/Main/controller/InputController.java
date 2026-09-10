@@ -33,6 +33,28 @@ public interface InputController {
     void player2UseDynamite();
 
     /**
+     * 玩家1使用强力药水（按键 A，FR-16/FR-18）：
+     * 消耗库存 1 瓶，自身钩爪收回速度 ×2 持续 10 秒；生效中再用仅刷新时长。
+     */
+    void player1UsePowerPotion();
+
+    /**
+     * 玩家2使用强力药水（按键 Num1）：逻辑与玩家1完全对称独立。
+     */
+    void player2UsePowerPotion();
+
+    /**
+     * 玩家1使用冰冻箱（按键 D，FR-15/FR-16）：
+     * 消耗库存 1 个，仅对玩家2钩爪生效，冻结 3 秒（运动完全暂停）。
+     */
+    void player1UseFreezeBox();
+
+    /**
+     * 玩家2使用冰冻箱（按键 Num2）：仅对玩家1钩爪生效，逻辑对称独立。
+     */
+    void player2UseFreezeBox();
+
+    /**
      * 暂停/恢复对局（按键 ESC，双方共用，FR-19）。
      * PLAYING 与 PAUSED 之间互相切换；READY/FINISHED 状态下忽略。
      * 倒计时与钩爪收回的冻结由各自持有方监听 GameState 实现。

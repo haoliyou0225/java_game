@@ -2,10 +2,15 @@
 package Main.view;
 
 import Main.config.Config;
+import Main.model.BigGold;
 import Main.model.Bomb;
+import Main.model.Diamond;
+import Main.model.DiamondPig;
 import Main.model.GameModel;
+import Main.model.Gold;
 import Main.model.Hook;
 import Main.model.Item;
+import Main.model.MediumGold;
 import Main.model.MineMap;
 import Main.model.Mole;
 import Main.model.MysteryBag;
@@ -66,18 +71,20 @@ public class GameViewImpl implements GameView {
         if (mineMap != null && mineMap.getItems() != null) {
             for (Item item : mineMap.getItems()) {
                 double r = item.getRadius();
-                if (item instanceof Bomb) {
+                if (item instanceof DiamondPig) {
+                    drawDiamondPig(gc, (DiamondPig) item, r);
+                } else if (item instanceof Bomb) {
                     // 炸弹：黑圆 + 红 TNT
                     gc.setFill(Color.rgb(30, 30, 30));
                     gc.fillOval(item.getX() - r, item.getY() - r, r * 2, r * 2);
                     gc.setFill(Color.rgb(220, 40, 40));
                     gc.fillText("TNT", item.getX() - 12, item.getY() + 4);
                 } else if (item instanceof Mole) {
-                    // 鼹鼠：棕圆
+                    // 鼹鼠：棕圆 + 分值
                     gc.setFill(Color.rgb(139, 90, 43));
                     gc.fillOval(item.getX() - r, item.getY() - r, r * 2, r * 2);
                     gc.setFill(Color.WHITE);
-                    gc.fillText("10", item.getX() - 8, item.getY() + 5);
+                    gc.fillText(String.valueOf(item.getScore()), item.getX() - 8, item.getY() + 5);
                 } else if (item instanceof MysteryBag) {
                     // 福袋：紫圆 + 黄字
                     gc.setFill(Color.rgb(128, 64, 200));
@@ -85,12 +92,12 @@ public class GameViewImpl implements GameView {
                     gc.setFill(Color.rgb(255, 215, 0));
                     gc.fillText("袋", item.getX() - 8, item.getY() + 5);
                 } else {
-                    // 普通物品：按分值分档着色
+                    // 普通矿石：按品类着色 + 分值
                     gc.setFill(colorOf(item));
                     gc.fillOval(item.getX() - r, item.getY() - r, r * 2, r * 2);
                     gc.setFill(Color.WHITE);
                     gc.fillText(String.valueOf(item.getScore()),
-                            item.getX() - 10, item.getY() + 5);
+                            item.getX() - 12, item.getY() + 5);
                 }
             }
         }
@@ -120,20 +127,65 @@ public class GameViewImpl implements GameView {
         // 钩爪头
         gc.setFill(color);
         gc.fillOval(hook.getX() - 8, hook.getY() - 8, 16, 16);
+
+        // 结算瞬时飘字（融合 feature/item）：钩爪回起点时在锚点旁显示 2 秒
+        long now = System.currentTimeMillis();
+        if (hook.getSettleLabel() != null && now < hook.getSettleLabelUntil()) {
+            String text = hook.getSettleLabel();
+            double labelX = hook.getStartX() + 20;
+            double labelY = hook.getStartY() + 4;
+            // 半透明黑底（ASCII 约 9px/字，中文约 16px/字）
+            double boxW = text.chars().mapToDouble(c -> c > 0x2E80 ? 16 : 9).sum() + 8;
+            gc.setFill(Color.rgb(0, 0, 0, 0.7));
+            gc.fillRect(labelX - 4, labelY - 15, boxW, 20);
+            // 福袋道具名用金色，普通分数用白色
+            gc.setFill(hook.getSettleIcon() != null ? Color.rgb(255, 215, 0) : Color.WHITE);
+            gc.fillText(text, labelX, labelY);
+        }
     }
 
-    /** 按物品分值分档选择颜色（用于 Gold/BigGold/Diamond/Stone） */
+    /**
+     * FR-11 钻石猪：粉色猪身圆 + 朝向猪鼻 + 头顶浅蓝钻石图标 + 钻石颗数；加速时白色描边高亮。
+     */
+    private void drawDiamondPig(GraphicsContext gc, DiamondPig pig, double r) {
+        // 猪身（粉色圆）
+        gc.setFill(Color.rgb(255, 158, 190));
+        gc.fillOval(pig.getX() - r, pig.getY() - r, r * 2, r * 2);
+        // 加速冲刺时白色描边提示
+        if (pig.isDashing()) {
+            gc.setStroke(Color.WHITE);
+            gc.setLineWidth(2.5);
+            gc.strokeOval(pig.getX() - r, pig.getY() - r, r * 2, r * 2);
+        }
+        // 猪鼻（朝向方向的深色小圆）
+        double snoutOff = pig.getFacing() * r * 0.55;
+        gc.setFill(Color.rgb(230, 110, 150));
+        gc.fillOval(pig.getX() + snoutOff - 5, pig.getY() - 3, 10, 8);
+        // 头顶钻石图标（浅蓝小菱形）
+        double cx = pig.getX();
+        double cy = pig.getY() - r - 6;
+        gc.setFill(Color.rgb(120, 200, 255));
+        gc.fillPolygon(new double[]{cx, cx + 6, cx, cx - 6},
+                new double[]{cy - 7, cy, cy + 7, cy}, 4);
+        // 颗数文字
+        gc.setFill(Color.WHITE);
+        gc.fillText("x" + pig.getDiamonds(), pig.getX() - 10, pig.getY() + 5);
+    }
+
+    /** 按物品种类选择颜色（用于 Gold/MediumGold/BigGold/Diamond/Stone） */
     private Color colorOf(Item item) {
-        int value = item.getScore();
-        if (value >= 400) {
-            return Color.rgb(230, 90, 90);    // BigGold 大金块：红色
+        if (item instanceof BigGold) {
+            return Color.rgb(230, 90, 90);      // 大金块：红色
         }
-        if (value >= 100) {
-            return Color.rgb(120, 200, 255); // Diamond 钻石：浅蓝
+        if (item instanceof MediumGold) {
+            return Color.rgb(255, 150, 40);     // 中金块：橙色
         }
-        if (value >= 50) {
-            return Color.rgb(255, 215, 0);   // Gold 金块：金色
+        if (item instanceof Diamond) {
+            return Color.rgb(120, 200, 255);    // 钻石：浅蓝
         }
-        return Color.rgb(160, 160, 160);      // Stone 石头：灰色
+        if (item instanceof Gold) {
+            return Color.rgb(255, 215, 0);      // 小金块：金色
+        }
+        return Color.rgb(160, 160, 160);        // 石头：灰色
     }
 }

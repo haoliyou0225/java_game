@@ -25,6 +25,8 @@ public class HookImpl implements Hook {
     private static final double SWING_LENGTH = 70;
     /** 鼹鼠偏转冷却（纳秒，避免同一只鼹鼠连续偏转） */
     private static final long DEFLECT_COOLDOWN_NS = 250_000_000L;
+    /** 钻石猪逃脱冷却（纳秒，同一只猪逃脱后 0.5s 内不再掷捕获骰） */
+    private static final long PIG_ESCAPE_COOLDOWN_NS = 500_000_000L;
 
     private HookState state;
     private double angle;      // 弧度，PI/2 表示垂直向下
@@ -37,15 +39,29 @@ public class HookImpl implements Hook {
     // ===== 眩晕 / 抢夺 / 档位相关状态 =====
     /** 眩晕剩余秒数 */
     private double stunTimer;
-    /** 抓取瞬间的绳长（档位收回速度 = 该绳长 / 档位耗时） */
+    /** FR-16 冰冻剩余秒数（FROZEN 态倒计时） */
+    private double frozenTimer;
+    /** 进入 FROZEN 前的状态，解冻后恢复 */
+    private HookState preFrozenState;
+    /** FR-16 强力药水剩余秒数（>0 时空钩/携带收回速度 ×2） */
+    private double speedBoostTimer;
+    /** 抓取瞬间的绳长（收回速度 = 该绳长 / 物品收回耗时） */
     private double grabRopeLength;
     /** 最近一次抓取时间戳（毫秒，50ms 抢夺窗口） */
     private long grabTimestampMs;
     /** 抓取时物品原始坐标（抢夺后弹回） */
     private double grabOriginX, grabOriginY;
-    /** 鼹鼠偏转冷却：最近偏转的鼹鼠与时间 */
-    private Item lastDeflectMole;
-    private long lastDeflectNano;
+    /** 活物交互冷却：最近造成偏转/逃脱的鼹鼠或钻石猪与时间 */
+    private Item lastInteractMob;
+    private long lastInteractNano;
+
+    // ===== 结算瞬时飘字（融合 feature/item） =====
+    /** 飘字文本（null 无飘字） */
+    private String settleLabel;
+    /** 飘字过期时间戳（毫秒） */
+    private long settleLabelUntil;
+    /** 飘字对应福袋道具图标（null 为普通分数） */
+    private Main.config.GameConfig.MysteryReward settleIcon;
 
     public HookImpl(int playerId, Rope rope) {
         this.playerId = playerId;
@@ -120,6 +136,10 @@ public class HookImpl implements Hook {
     /** 每帧更新（由 GameManager 驱动） */
     @Override
     public void update(double deltaTime, List<Item> items, Hook otherHook) {
+        // FR-16 强力药水倒计时：对局内任意状态都持续消耗（PAUSED 时本方法不被调用，天然冻结）
+        if (speedBoostTimer > 0) {
+            speedBoostTimer = Math.max(0, speedBoostTimer - deltaTime);
+        }
         switch (state) {
             case SWINGING:
                 updateSwing(deltaTime);
@@ -135,8 +155,8 @@ public class HookImpl implements Hook {
                 }
                 break;
             case GRABBING:
-                // 收回速度 = 抓取瞬间绳长 / 重量档位耗时（全程匀速）
-                ropeLength -= tierRetractSpeed() * deltaTime;
+                // 收回速度 = 抓取瞬间绳长 / 物品收回耗时（全程匀速，强力药水生效 ×2）
+                ropeLength -= carriedRetractSpeed() * deltaTime;
                 dragItem();
                 if (ropeLength <= SWING_LENGTH) {
                     ropeLength = SWING_LENGTH;
@@ -144,8 +164,10 @@ public class HookImpl implements Hook {
                 }
                 break;
             case RETRACTING:
-                // 空钩固定 800px/s
-                ropeLength -= GameConfig.HOOK_EMPTY_RETRACT_SPEED * deltaTime;
+                // 空钩固定 800px/s（强力药水生效 ×2）
+                double emptySpeed = GameConfig.HOOK_EMPTY_RETRACT_SPEED
+                        * (speedBoostTimer > 0 ? GameConfig.HOOK_SPEED_BOOST_MULTIPLIER : 1.0);
+                ropeLength -= emptySpeed * deltaTime;
                 if (ropeLength <= SWING_LENGTH) {
                     ropeLength = SWING_LENGTH;
                     state = HookState.SWINGING;
@@ -158,11 +180,18 @@ public class HookImpl implements Hook {
                     state = HookState.RETRACTING;
                 }
                 break;
+            case FROZEN:
+                // FR-16 冰冻箱：运动完全暂停、绳长/物品不动、无法操作；倒计时结束恢复冻结前状态
+                frozenTimer -= deltaTime;
+                if (frozenTimer <= 0) {
+                    state = preFrozenState;
+                }
+                break;
         }
         rope.setCurrentLen(ropeLength);
     }
 
-    /** 抛出过程中尝试碰撞：鼹鼠偏转 / TNT立即爆炸 / 普通物品附着 */
+    /** 抛出过程中尝试碰撞：鼹鼠偏转 / 钻石猪概率捕获 / TNT立即爆炸 / 普通物品附着 */
     private void grabIfCollide(List<Item> items) {
         long nowNano = System.nanoTime();
         for (Item item : items) {
@@ -172,16 +201,30 @@ public class HookImpl implements Hook {
             // 鼹鼠：THROWING 钩爪碰撞后运动角度随机偏移 ±15°~±30°，不被抓取，继续飞行
             // （RETRACT/GRABBING 状态不受影响，也走不到本方法）
             if (item instanceof Mole) {
-                if (item == lastDeflectMole && nowNano - lastDeflectNano < DEFLECT_COOLDOWN_NS) {
+                if (item == lastInteractMob && nowNano - lastInteractNano < DEFLECT_COOLDOWN_NS) {
                     continue;
                 }
                 double deg = GameConfig.MOLE_DEFLECT_MIN_DEG
                         + Math.random() * (GameConfig.MOLE_DEFLECT_MAX_DEG - GameConfig.MOLE_DEFLECT_MIN_DEG);
                 double sign = ThreadLocalRandom.current().nextBoolean() ? 1 : -1;
                 angle += sign * Math.toRadians(deg);
-                lastDeflectMole = item;
-                lastDeflectNano = nowNano;
+                lastInteractMob = item;
+                lastInteractNano = nowNano;
                 continue;
+            }
+
+            // 钻石猪（FR-11）：碰撞时仅约 40% 概率被捕获；逃脱则立即冲刺并进入短暂冷却
+            if (item instanceof DiamondPig) {
+                if (item == lastInteractMob && nowNano - lastInteractNano < PIG_ESCAPE_COOLDOWN_NS) {
+                    continue;
+                }
+                DiamondPig pig = (DiamondPig) item;
+                if (!pig.tryCapture()) {
+                    lastInteractMob = item;
+                    lastInteractNano = nowNano;
+                    continue;
+                }
+                // 捕获成功：走下方通用附着流程
             }
 
             item.onGrab(this);
@@ -226,18 +269,20 @@ public class HookImpl implements Hook {
         grabbedItem.setY(tip[1]);
     }
 
-    /** 重量档位收回速度：轻档1.2s / 中档2.5s / 重档5.0s 完成收回 */
-    private double tierRetractSpeed() {
-        double weight = grabbedItem == null ? 1.0 : grabbedItem.getWeight();
-        double duration;
-        if (weight <= GameConfig.WEIGHT_LIGHT_MAX) {
-            duration = GameConfig.RETRACT_TIME_LIGHT;
-        } else if (weight <= GameConfig.WEIGHT_MEDIUM_MAX) {
-            duration = GameConfig.RETRACT_TIME_MEDIUM;
-        } else {
-            duration = GameConfig.RETRACT_TIME_HEAVY;
+    /**
+     * 携带物品收回速度（FR-04/FR-10）：
+     * 速度 = 抓取瞬间绳长 / 该物品 getRetractDuration() 指定耗时；
+     * 强力药水生效期间（FR-16）整体 ×2。
+     */
+    private double carriedRetractSpeed() {
+        double duration = grabbedItem == null
+                ? GameConfig.RETRACT_TIME_LIGHT
+                : grabbedItem.getRetractDuration();
+        double speed = grabRopeLength / duration;
+        if (speedBoostTimer > 0) {
+            speed *= GameConfig.HOOK_SPEED_BOOST_MULTIPLIER;
         }
-        return grabRopeLength / duration;
+        return speed;
     }
 
     /** 钩尖是否触达矿洞边界（左/右/下） */
@@ -279,6 +324,44 @@ public class HookImpl implements Hook {
         return carried;
     }
 
+    // ===== FR-16 冰冻箱 / 强力药水 =====
+
+    /**
+     * 冰冻箱：进入 FROZEN，运动完全暂停 seconds 秒，解冻后恢复冻结前状态。
+     * 再次冻结仅刷新倒计时（FR-18 刷新精神，不叠加）。
+     */
+    @Override
+    public void freeze(double seconds) {
+        if (state == HookState.FROZEN) {
+            frozenTimer = seconds;
+            return;
+        }
+        preFrozenState = state;
+        frozenTimer = seconds;
+        state = HookState.FROZEN;
+    }
+
+    @Override public boolean isFrozen() { return state == HookState.FROZEN; }
+
+    @Override public double getFreezeRemaining() {
+        return state == HookState.FROZEN ? Math.max(0, frozenTimer) : 0;
+    }
+
+    /**
+     * 强力药水：收回速度 ×2 持续 seconds 秒；
+     * 已生效时再次使用仅把剩余时间重置为 seconds（FR-18：刷新持续时间，不叠加倍率）。
+     */
+    @Override
+    public void applySpeedBoost(double seconds) {
+        this.speedBoostTimer = seconds;
+    }
+
+    @Override public boolean isSpeedBoostActive() { return speedBoostTimer > 0; }
+
+    @Override public double getSpeedBoostRemaining() {
+        return Math.max(0, speedBoostTimer);
+    }
+
     /** 该钩子当前是否携带此物品（供 GameManager 结算归属） */
     @Override
     public boolean ownsItem(Item item) {
@@ -305,4 +388,23 @@ public class HookImpl implements Hook {
     @Override public long getGrabTimestampMs() { return grabTimestampMs; }
     @Override public double getGrabOriginX() { return grabOriginX; }
     @Override public double getGrabOriginY() { return grabOriginY; }
+
+    // ===== 结算瞬时飘字（融合 feature/item） =====
+    /** 设置普通分数飘字（durationMs 毫秒后失效） */
+    public void setSettleLabel(String text, long durationMs) {
+        this.settleLabel = text;
+        this.settleIcon = null;
+        this.settleLabelUntil = System.currentTimeMillis() + durationMs;
+    }
+
+    /** 设置福袋道具飘字（带道具类型，渲染时显示道具名） */
+    public void setSettleLabel(String text, Main.config.GameConfig.MysteryReward icon, long durationMs) {
+        this.settleLabel = text;
+        this.settleIcon = icon;
+        this.settleLabelUntil = System.currentTimeMillis() + durationMs;
+    }
+
+    @Override public String getSettleLabel() { return settleLabel; }
+    @Override public long getSettleLabelUntil() { return settleLabelUntil; }
+    @Override public Main.config.GameConfig.MysteryReward getSettleIcon() { return settleIcon; }
 }

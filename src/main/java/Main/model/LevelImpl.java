@@ -115,8 +115,8 @@ public class LevelImpl implements Level {
 
     /**
      * FR-01 公平性校验：
-     * 1) 左右半区普通物品（金块/大金块/钻石/石头/鼹鼠）总价值差百分比 ≤5%
-     *    （福袋分值抓取时才随机、炸弹为负，均不计入价值）
+     * 1) 左右半区物品总价值差百分比 ≤5%（福袋 100~800 金币、钻石猪颗数×600+10
+     *    均在生成时预计算，计入总价值；炸弹为负且不计分，排除）
      * 2) 左右半区福袋数量差 ≤1
      */
     private boolean isMapFair(List<Item> items) {
@@ -127,11 +127,12 @@ public class LevelImpl implements Level {
             boolean onLeft = item.getX() < midX;
             if (item instanceof MysteryBag) {
                 if (onLeft) leftBags++; else rightBags++;
-            } else if (item instanceof Bomb) {
-                // 炸弹不计入价值
-            } else {
-                if (onLeft) leftValue += item.getScore(); else rightValue += item.getScore();
             }
+            if (item instanceof Bomb) {
+                // 炸弹不计分、不计入价值
+                continue;
+            }
+            if (onLeft) leftValue += item.getScore(); else rightValue += item.getScore();
         }
         if (Math.abs(leftBags - rightBags) > GameConfig.MAP_BAG_MAX_DIFF) {
             return false;
@@ -144,12 +145,12 @@ public class LevelImpl implements Level {
         return (maxV - minV) * 100.0 / maxV <= GameConfig.MAP_MAX_VALUE_DIFF_PERCENT;
     }
 
-    /** 左右半区普通物品价值差百分比（兜底择优用） */
+    /** 左右半区物品总价值差百分比（兜底择优用，口径与 isMapFair 一致） */
     private double valueDiffPercent(List<Item> items) {
         double midX = Config.WIDTH / 2.0;
         int leftValue = 0, rightValue = 0;
         for (Item item : items) {
-            if (item instanceof MysteryBag || item instanceof Bomb) continue;
+            if (item instanceof Bomb) continue;
             if (item.getX() < midX) leftValue += item.getScore();
             else rightValue += item.getScore();
         }
@@ -159,16 +160,31 @@ public class LevelImpl implements Level {
         return (maxV - minV) * 100.0 / maxV;
     }
 
-    /** 随机生成一种物品（原版 7 种：金块/大金块/钻石/石头/炸弹/福袋/鼹鼠） */
+    /**
+     * 加权随机生成一种物品（FR-10 全 9 品类）：
+     * 小金块20 / 中金块15 / 大金块10 / 钻石8 / 石头22 / 炸弹8 / 福袋7 / 鼹鼠5 / 钻石猪5（百分比）。
+     * 低值矿石铺量、高值目标稀有，贴近原版手感。
+     */
     private Item createRandomItem(Random rnd, double x, double y) {
-        switch (rnd.nextInt(7)) {
-            case 0: return new Gold(x, y);
-            case 1: return new BigGold(x, y);
-            case 2: return new Diamond(x, y);
-            case 3: return new Stone(x, y);
-            case 4: return new Bomb(x, y);
-            case 5: return new MysteryBag(x, y);
-            default: return new Mole(x, y);
+        int r = rnd.nextInt(100);
+        if (r < 20) {
+            return new Gold(x, y);           // <20
+        } else if (r < 35) {
+            return new MediumGold(x, y);     // 20~34
+        } else if (r < 45) {
+            return new BigGold(x, y);        // 35~44
+        } else if (r < 53) {
+            return new Diamond(x, y);        // 45~52
+        } else if (r < 75) {
+            return new Stone(x, y);          // 53~74
+        } else if (r < 83) {
+            return new Bomb(x, y);           // 75~82
+        } else if (r < 90) {
+            return new MysteryBag(x, y);     // 83~89
+        } else if (r < 95) {
+            return new Mole(x, y);           // 90~94
+        } else {
+            return new DiamondPig(x, y);     // 95~99
         }
     }
 
