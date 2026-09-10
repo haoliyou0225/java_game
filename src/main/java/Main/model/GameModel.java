@@ -51,6 +51,14 @@ public interface GameModel {
     void shutdown();
 
     /**
+     * 设置对局提前结束回调（改进对局结束机制）：
+     * 当场上所有可抓取物品被清空且双方钩爪均处于 SWINGING 状态时，由模型触发此回调。
+     * 装配层（Main）据此停止倒计时与物理驱动并进入结算流程。
+     * 默认空实现，不影响未接入的模型实现。
+     */
+    default void setOnGameEnd(Runnable action) { }
+
+    /**
      * 胜负判定（FR-31）：比较双方最终分数。
      * 业务规则下沉到 Model 层，View 层仅负责文案与颜色渲染。
      *

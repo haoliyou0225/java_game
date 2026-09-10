@@ -43,6 +43,9 @@ public class GameManagerImpl implements GameManager, GameModel {
                 return t;
             });
 
+    /** 对局提前结束回调（场上物品清空且双方钩爪均回到 SWINGING 时触发） */
+    private Runnable onGameEnd;
+
     public GameManagerImpl() {
         // hook 原版初始化
         this.ropeP1 = new RopeImpl(GameConfig.ROPE_MAX_EXTEND_LENGTH);
@@ -133,6 +136,17 @@ public class GameManagerImpl implements GameManager, GameModel {
 
         // 3. 移除已爆炸的炸弹
         sceneItemList.removeIf(i -> (i instanceof Bomb && ((Bomb) i).isExploded()));
+
+        // 改进对局结束机制：场上可抓取物品清空且双方钩爪均处于 SWINGING 状态时，立即结束
+        if (sceneItemList.isEmpty()
+                && hookP1.getState() == HookState.SWINGING
+                && hookP2.getState() == HookState.SWINGING) {
+            setState(GameState.FINISHED);
+            if (onGameEnd != null) {
+                onGameEnd.run();
+            }
+            return;
+        }
 
         // 4. GameManager 原版每秒倒计时（GameTimerImpl 也在倒计时，双重保障）
         if (Math.random() < deltaTime) {
@@ -228,5 +242,11 @@ public class GameManagerImpl implements GameManager, GameModel {
     @Override
     public void shutdown() {
         hookRetrieveExecutor.shutdownNow();
+    }
+
+    /** 设置对局提前结束回调 */
+    @Override
+    public void setOnGameEnd(Runnable action) {
+        this.onGameEnd = action;
     }
 }

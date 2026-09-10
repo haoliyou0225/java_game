@@ -151,6 +151,14 @@ public class Main extends Application {
         }));
         timer.start();
 
+        // 改进对局结束机制：场上物品清空且双方钩爪均回到 SWINGING 时，模型回调停止倒计时并进入结算
+        // 注意：gameLoopTick 由 AnimationTimer 在 JavaFX Application Thread 驱动，回调在此线程执行，可直接操作 UI
+        model.setOnGameEnd(() -> {
+            timer.stop();            // 立即停止倒计时
+            physicsTimer.stop();     // 停止钩子物理驱动
+            showResultFlow(root, gamePane, model);
+        });
+
         root.getChildren().add(gamePane);
     }
 
