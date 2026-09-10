@@ -59,12 +59,31 @@ public interface GameModel {
     default void setOnGameEnd(Runnable action) { }
 
     /**
-     * 胜负判定（FR-31）：比较双方最终分数。
+     * 胜负判定（FR-31）：对局结束时严格按规则判定胜负。
      * 业务规则下沉到 Model 层，View 层仅负责文案与颜色渲染。
+     * <p>
+     * 规则：
+     * 1) 一方为 0 分、另一方为正分：0 分方判负
+     * 2) 双方均为 0 分：平局
+     * 3) 其余情况：分数高者获胜，相等则平局
      *
      * @return 正数=玩家1获胜，负数=玩家2获胜，0=平局
      */
     default int determineWinner() {
-        return Integer.compare(getPlayer1().getScore(), getPlayer2().getScore());
+        int score1 = getPlayer1().getScore();
+        int score2 = getPlayer2().getScore();
+        // 规则2：双方均为 0 分，直接判平局
+        if (score1 == 0 && score2 == 0) {
+            return 0;
+        }
+        // 规则1：一方为 0 分且另一方为正分，0 分方判负
+        if (score1 == 0) {
+            return -1; // 玩家1为 0 分，玩家2获胜
+        }
+        if (score2 == 0) {
+            return 1;  // 玩家2为 0 分，玩家1获胜
+        }
+        // 规则3：双方均有正分，比较分数高低
+        return Integer.compare(score1, score2);
     }
 }
