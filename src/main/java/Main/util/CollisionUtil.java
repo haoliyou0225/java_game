@@ -1,5 +1,5 @@
 // FR-17 碰撞检测工具：circleCollision(x1,y1,r1,x2,y2,r2) 圆形碰撞，静态方法，被 Hook.checkCollision* 调用
-package com.dz.hello.Main.util;
+package Main.util;
 
 /**
  * 碰撞检测工具（严格对齐 UML: <<static>>）

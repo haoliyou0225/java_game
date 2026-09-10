@@ -1,5 +1,5 @@
 // FR-04 绳索物理：最大绳长、当前绳长，随钩子运动动态伸缩
-package com.dz.hello.Main.model;
+package Main.model;
 
 public class Rope {
     private double maxLen;

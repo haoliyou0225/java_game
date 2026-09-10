@@ -1,13 +1,13 @@
 // FR-21 JavaFX 主界面：extends Application，start() 中搭场景/键盘监听/AnimationTimer 主循环，三阶段状态机切换
-package com.dz.hello.Main;
+package Main;
 
-import com.dz.hello.Main.config.GameConfig;
-import com.dz.hello.Main.controller.GameManager;
-import com.dz.hello.Main.controller.InputAction;
-import com.dz.hello.Main.controller.InputHandler;
-import com.dz.hello.Main.model.GameStage;
-import com.dz.hello.Main.view.GameMenu;
-import com.dz.hello.Main.view.GameUI;
+import Main.config.GameConfig;
+import Main.controller.GameManager;
+import Main.controller.InputAction;
+import Main.controller.InputHandler;
+import Main.model.GameStage;
+import Main.view.GameMenu;
+import Main.view.GameUI;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.scene.Scene;

@@ -1,5 +1,5 @@
 // FR-10 炸弹：被钩子勾住后触发爆炸，扣分 30（负分），立即清除自身
-package com.dz.hello.Main.model;
+package Main.model;
 
 public class Bomb extends Item {
     private boolean exploded;

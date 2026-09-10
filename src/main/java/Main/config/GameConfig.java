@@ -1,4 +1,4 @@
-package com.dz.hello.Main.config;
+package Main.config;
 
 /**
  * 游戏全局配置常量（严格对齐 UML 与分工文档）
