@@ -2,12 +2,12 @@
 package Main;
 
 import Main.config.Config;
+import Main.controller.GameManagerImpl;
 import Main.controller.GameTimer;
 import Main.controller.GameTimerImpl;
 import Main.controller.InputController;
 import Main.controller.InputControllerImpl;
 import Main.model.GameModel;
-import Main.model.GameModelImpl;
 import Main.model.GameState;
 import Main.view.HUDView;
 import Main.view.HUDViewImpl;
@@ -75,8 +75,8 @@ public class Main extends Application {
         Pane gamePane = new Pane();
         gamePane.setPrefSize(Config.WIDTH, Config.HEIGHT);
 
-        // 模型初始化（FR-30）
-        GameModel model = new GameModelImpl();
+        // 模型初始化（融合版：GameManagerImpl 同时实现 GameModel 接口）
+        GameModel model = new GameManagerImpl();
         model.setRemainingTime(Config.GAME_DURATION); // 从 90 秒开始
         model.setState(GameState.PLAYING);
 
