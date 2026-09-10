@@ -1,4 +1,4 @@
-package com.dz.hello.Main.model.entity;
+package Main.model;
 
 import java.util.Random;
 

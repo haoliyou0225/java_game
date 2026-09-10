@@ -1,6 +1,6 @@
-package com.dz.hello.Main.model;
+package Main.model;
 
-import com.dz.hello.controller.hook.IHook;
+import controller.hook.IHook;
 
 /**
  * 炸弹：负分物品，可被触发爆炸

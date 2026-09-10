@@ -1,4 +1,4 @@
-package com.dz.hello.Main.util;
+package Main.util;
 
 /**
  * 碰撞检测工具类（final，不可继承；私有构造，不可实例化）

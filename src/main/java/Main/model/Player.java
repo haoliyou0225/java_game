@@ -1,4 +1,4 @@
-package com.dz.hello.Main.model;
+package Main.model;
 
 /**
  * 玩家账户：每个玩家各自持有独立的金币余额。

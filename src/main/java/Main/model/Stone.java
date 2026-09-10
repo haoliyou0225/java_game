@@ -1,6 +1,6 @@
-package com.dz.hello.Main.model.entity;
+package Main.model;
 
-import com.dz.hello.controller.hook.IHook;
+import controller.hook.IHook;
 
 /**
  * 石头：低分重型物品。

@@ -1,6 +1,6 @@
-package com.dz.hello.Main.model.entity;
+package Main.model;
 
-import com.dz.hello.controller.hook.IHook;
+import controller.hook.IHook;
 
 /**
  * 金块：高分轻量物品
