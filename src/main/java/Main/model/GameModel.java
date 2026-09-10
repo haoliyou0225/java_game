@@ -59,4 +59,12 @@ public interface GameModel {
     default int determineWinner() {
         return Integer.compare(getPlayer1().getScore(), getPlayer2().getScore());
     }
+
+    /**
+     * 玩家使用炸药触发爆炸效果（由 InputController 调用）。
+     * 若该玩家钩爪正携带物品，则炸掉物品使钩爪空钩快速收回。
+     *
+     * @param playerId 使用炸药的玩家编号（1 或 2）
+     */
+    void triggerExplosion(int playerId);
 }

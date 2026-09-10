@@ -66,8 +66,10 @@ public class HookImpl implements Hook {
     /** 紧急收回（空钩） */
     @Override
     public void retractHook() {
-        if (state == HookState.THROWING || state == HookState.RETRACTING) {
+        if (state == HookState.THROWING || state == HookState.RETRACTING || state == HookState.GRABBING) {
             state = HookState.RETRACTING;
+            // 炸药炸掉物品时：清除携带引用，让钩爪真正空钩收回
+            grabbedItem = null;
         }
     }
 
@@ -134,14 +136,16 @@ public class HookImpl implements Hook {
             if (result.isHit()) {
                 item.onGrab(this);
                 if (item instanceof Bomb) {
-                    // 炸弹：碰到立即爆炸（无参 triggerExplode，对齐原版 feature/item）
-                    // 同时清除爆炸半径内所有普通物品
+                    // TNT 炸药桶：碰到就炸，清除半径内物品（含自身），不扣分，空钩收回
                     ((Bomb) item).triggerExplode();
+                    // 立即把触发爆炸的 Bomb 自身也从列表移除，防止残留到下一帧被结算 -150
+                    item.setGrabbed(false);
+                    items.remove(item);
                     double bx = item.getX(), by = item.getY();
                     java.util.Iterator<Item> it = items.iterator();
                     while (it.hasNext()) {
                         Item target = it.next();
-                        if (target == item || target instanceof Bomb) continue;
+                        if (target instanceof Bomb) continue;
                         double dx = target.getX() - bx;
                         double dy = target.getY() - by;
                         if (Math.sqrt(dx * dx + dy * dy) <= GameConfig.TNT_EXPLOSION_RADIUS) {
@@ -191,6 +195,11 @@ public class HookImpl implements Hook {
         return grabbedItem == item;
     }
 
+    @Override
+    public Item getGrabbedItem() {
+        return grabbedItem;
+    }
+
     @Override public HookState getState() { return state; }
     @Override public double getAngle() { return angle; }
     @Override public double getRopeLength() { return ropeLength; }
@@ -205,4 +214,30 @@ public class HookImpl implements Hook {
         return playerId == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2;
     }
     @Override public double getStartY() { return GameConfig.HOOK_ANCHOR_Y; }
+
+    // ===== 结算瞬时标注 =====
+    private String settleLabel;
+    private long settleLabelUntil;
+    private Main.config.GameConfig.MysteryReward settleIcon;
+    private int settleScore;  // 待结算分数（Bomb 碰到时由 HookImpl 设置，GameManager 读取后清零）
+
+    @Override public String getSettleLabel() { return settleLabel; }
+    @Override public long getSettleLabelUntil() { return settleLabelUntil; }
+    @Override public Main.config.GameConfig.MysteryReward getSettleIcon() { return settleIcon; }
+    public int getSettleScore() { return settleScore; }
+    public void clearSettleScore() { this.settleScore = 0; }
+
+    /** 设置结算标注，显示 durationMs 毫秒后自动消失 */
+    public void setSettleLabel(String text, long durationMs) {
+        this.settleLabel = text;
+        this.settleLabelUntil = System.currentTimeMillis() + durationMs;
+        this.settleIcon = null;
+    }
+
+    /** 设置结算标注（带道具图标），显示 durationMs 毫秒后自动消失 */
+    public void setSettleLabel(String text, Main.config.GameConfig.MysteryReward icon, long durationMs) {
+        this.settleLabel = text;
+        this.settleIcon = icon;
+        this.settleLabelUntil = System.currentTimeMillis() + durationMs;
+    }
 }

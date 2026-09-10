@@ -1,16 +1,17 @@
-// FR-UI InputControllerImpl：双人输入实现（状态校验→置 THROWING→模拟收回，暂停切换），来自 feature_ui 分支
+// FR-UI InputControllerImpl：双人输入实现（状态校验→置 THROWING→模拟收回，暂停切换，炸药使用），来自 feature_ui 分支
 package Main.controller;
 
 import Main.model.GameModel;
 import Main.model.GameState;
 import Main.model.Hook;
 import Main.model.HookState;
+import Main.model.Item;
 import Main.util.LogUtils;
 
 /**
  * FR-18 双人按键独立监听 —— 控制器实现。
  * <p>
- * 职责：接收 View 层转发的按键事件，校验对局状态后驱动对应玩家的钩爪。
+ * 职责：接收 View 层转发的按键事件，校验对局状态后驱动对应玩家的钩爪或道具。
  * 两名玩家的处理逻辑完全独立（各自走独立分支），互不阻塞、互不干扰。
  * <p>
  * 分层约束：本类位于 controller 包，不导入任何 javafx.* 类；
@@ -49,6 +50,50 @@ public class InputControllerImpl implements InputController {
     @Override
     public void player2ReleaseHook() {
         releaseHook(model.getHook2(), "玩家2");
+    }
+
+    /**
+     * 玩家1使用炸药（按键 A）。
+     * 消耗库存 → 若钩爪携带物品则炸掉 → 钩爪变空钩收回。
+     */
+    @Override
+    public void player1UseBomb() {
+        useBomb(1, model.getHook1(), model.getPlayer1(), "玩家1");
+    }
+
+    /**
+     * 玩家2使用炸药（按键 L）。
+     * 与玩家1逻辑完全对称且独立。
+     */
+    @Override
+    public void player2UseBomb() {
+        useBomb(2, model.getHook2(), model.getPlayer2(), "玩家2");
+    }
+
+    /**
+     * 使用炸药的公共流程：状态校验 → 库存扣减 → 炸掉携带物品 → 钩爪空钩收回。
+     *
+     * @param playerId    玩家编号（1 或 2）
+     * @param hook        目标钩爪
+     * @param player      玩家实例（用于扣减炸药库存）
+     * @param playerLabel 玩家标签（日志用）
+     */
+    private void useBomb(int playerId, Hook hook, Main.model.Player player, String playerLabel) {
+        // 非对局中忽略
+        if (model.getState() != GameState.PLAYING) {
+            return;
+        }
+        if (hook == null || player == null) {
+            return;
+        }
+        // 库存不足
+        if (!player.useBomb()) {
+            System.out.println(LogUtils.format(playerLabel + " 炸药不足"));
+            return;
+        }
+        // 触发爆炸效果：若钩爪正携带物品则清除
+        model.triggerExplosion(playerId);
+        System.out.println(LogUtils.format(playerLabel + " 使用炸药！剩余 " + player.getBombCount() + " 个"));
     }
 
     /**

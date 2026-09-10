@@ -92,7 +92,9 @@ public class Main extends Application {
         hudView.render(model); // 初始显示
 
         // FR-18：双人按键独立监听（View/Main 层监听 JavaFX 键盘事件，转发给 controller）
-        // S → 玩家1释放钩爪；↓ → 玩家2释放钩爪；ESC → 暂停/继续（双方共用）
+        // S → 玩家1释放钩爪；A → 玩家1使用炸药
+        // ↓ → 玩家2释放钩爪；L → 玩家2使用炸药
+        // ESC → 暂停/继续（双方共用）
         InputController inputController = new InputControllerImpl(model);
 
         // 暂停遮罩（挂在 gamePane 顶层覆盖游戏画面；初始隐藏）
@@ -104,8 +106,12 @@ public class Main extends Application {
                 KeyCode code = event.getCode();
                 if (code == KeyCode.S) {
                     inputController.player1ReleaseHook();   // 玩家1：释放钩爪
+                } else if (code == KeyCode.A) {
+                    inputController.player1UseBomb();       // 玩家1：使用炸药
                 } else if (code == KeyCode.DOWN) {
                     inputController.player2ReleaseHook();   // 玩家2：释放钩爪
+                } else if (code == KeyCode.L) {
+                    inputController.player2UseBomb();       // 玩家2：使用炸药
                 } else if (code == KeyCode.ESCAPE) {
                     inputController.togglePause();
                     // 按切换后的最新状态显示/隐藏「已暂停」遮罩
@@ -115,7 +121,6 @@ public class Main extends Application {
                         pauseView.hide();
                     }
                 }
-                // 其余按键本阶段忽略（道具快捷键后续接入）
             });
         }
 

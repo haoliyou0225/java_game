@@ -11,6 +11,8 @@ public interface Hook {
     boolean checkCollisionOtherHook(Hook other);
     void update(double deltaTime, List<Item> items, Hook otherHook);
     boolean ownsItem(Item item);
+    /** 当前携带的物品（GRABBING 状态下非 null，其余状态 null） */
+    Item getGrabbedItem();
     HookState getState();
     double getAngle();
     double getRopeLength();
@@ -27,4 +29,12 @@ public interface Hook {
     double getStartX();
     /** 钩爪起点（锚点）Y 坐标 */
     double getStartY();
+
+    // ===== 结算瞬时标注（钩爪回到起点时显示几秒，由 GameManager 设置，GameView 渲染） =====
+    /** 结算标注文本（null 表示无标注） */
+    String getSettleLabel();
+    /** 结算标注过期时间戳（毫秒），当前时间超过则标注失效 */
+    long getSettleLabelUntil();
+    /** 结算图标类型（NONE=无图标，其余对应福袋开出的道具图标） */
+    Main.config.GameConfig.MysteryReward getSettleIcon();
 }

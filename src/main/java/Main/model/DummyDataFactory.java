@@ -185,6 +185,7 @@ public final class DummyDataFactory {
         @Override public boolean checkCollisionOtherHook(Hook other) { return false; }
         @Override public void update(double deltaTime, List<Item> items, Hook otherHook) { }
         @Override public boolean ownsItem(Item item) { return false; }
+        @Override public Item getGrabbedItem() { return null; }
 
         // ===== 状态/角度读取 =====
         @Override public HookState getState() { return state; }
@@ -199,5 +200,8 @@ public final class DummyDataFactory {
         @Override public double getY() { return y; }
         @Override public double getStartX() { return startX; }
         @Override public double getStartY() { return startY; }
+        @Override public String getSettleLabel() { return null; }
+        @Override public long getSettleLabelUntil() { return 0; }
+        @Override public Main.config.GameConfig.MysteryReward getSettleIcon() { return null; }
     }
 }

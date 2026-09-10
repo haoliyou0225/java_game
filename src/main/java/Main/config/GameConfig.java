@@ -55,8 +55,38 @@ public final class GameConfig {
     public static final int PLAYER_INIT_DYNAMITE_COUNT = 1;
     /** 玩家炸药库存上限 */
     public static final int PLAYER_MAX_DYNAMITE_COUNT = 3;
+    /** 炸药库存已满时，额外炸药自动转为金币 */
+    public static final int BOMB_FULL_AUTO_GOLD = 50;
     /** TNT爆炸半径 单位像素 */
-    public static final int TNT_EXPLOSION_RADIUS = 300;
+    public static final int TNT_EXPLOSION_RADIUS = 100;
+
+    // ===== 道具奖励相关常量（福袋 6 种奖励等概率抽取） =====
+    /** 幸运草效果：物品收益加成百分比（+50%） */
+    public static final double LUCKY_CLOVER_BONUS_RATE = 1.5;
+    /** 钻石升级药水效果：钻石价值倍率 */
+    public static final int DIAMOND_BOOST_MULTIPLIER = 2;
+    /** 强力药水效果：钩爪收回速度倍率 */
+    public static final double POWER_POTION_SPEED_MULTIPLIER = 2.0;
+    /** 强力药水效果持续时长（秒） */
+    public static final int POWER_POTION_DURATION_SEC = 10;
+    /** 福袋保底金币奖励范围（200~800 随机） */
+    public static final int MYSTERY_GOLD_MIN = 200;
+    public static final int MYSTERY_GOLD_MAX = 800;
+
+    /** 福袋 6 种道具奖励枚举，等概率随机抽取 */
+    public enum MysteryReward {
+        LUCKY_CLOVER("幸运草"),       // 幸运草：本局收益 +50%
+        DIAMOND_BOOST("钻石升级药水"), // 钻石升级药水：钻石价值翻倍
+        STONE_BOOK("石头收藏书"),     // 石头收藏书：石头消除惩罚（仅 +1 金币）
+        MYSTERY_GOLD("金币"),         // 金币：200~800 随机
+        DYNAMITE("炸药"),             // 炸药：+1 个，满则转 50 金币
+        POWER_POTION("强力药水");     // 强力药水：钩爪收回速度翻倍（预留）
+
+        private final String cnName;
+        MysteryReward(String cnName) { this.cnName = cnName; }
+        public String cnName() { return cnName; }
+    }
+
     /** 福袋最小随机金币 */
     public static final int MYSTERY_BAG_MIN_GOLD = 100;
     /** 福袋最大随机金币 */

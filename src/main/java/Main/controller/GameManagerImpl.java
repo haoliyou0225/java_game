@@ -5,11 +5,13 @@ package Main.controller;
 import Main.config.Config;
 import Main.config.GameConfig;
 import Main.model.*;
+import Main.util.LogUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -108,6 +110,26 @@ public class GameManagerImpl implements GameManager, GameModel {
         hookP1.update(deltaTime, sceneItemList, hookP2);
         hookP2.update(deltaTime, sceneItemList, hookP1);
 
+        // 1.1 读取钩子待结算分数（目前仅福袋/特殊标注使用，TNT 炸药桶已改为只爆炸不扣分，settleScore 恒为 0 自动跳过）
+        if (hookP1 instanceof HookImpl) {
+            HookImpl h1 = (HookImpl) hookP1;
+            int sc1 = h1.getSettleScore();
+            if (sc1 != 0) {
+                gameData.addScore(1, sc1);
+                player1.addScore(sc1);
+                h1.clearSettleScore();
+            }
+        }
+        if (hookP2 instanceof HookImpl) {
+            HookImpl h2 = (HookImpl) hookP2;
+            int sc2 = h2.getSettleScore();
+            if (sc2 != 0) {
+                gameData.addScore(2, sc2);
+                player2.addScore(sc2);
+                h2.clearSettleScore();
+            }
+        }
+
         // 2. 物品位置更新 + 携带物品收回完成时结算分数
         List<Item> settled = new ArrayList<>();
         for (Item item : sceneItemList) {
@@ -116,16 +138,56 @@ public class GameManagerImpl implements GameManager, GameModel {
                 Hook owner = itemOnHook(item) == 1 ? hookP1 : hookP2;
                 if (owner.getState() == HookState.SWINGING) {
                     item.setGrabbed(false);
-                    // 原版：用 getSettlementGold 结算（石头=1金币）
-                    int score = item.getSettlementGold();
-                    // 同时写入 GameManager 和 GameModel 双体系
-                    gameData.addScore(owner.getPlayerId(), score);
-                    if (owner.getPlayerId() == 1) {
-                        player1.addScore(score);
+                    Player grabber = owner.getPlayerId() == 1 ? player1 : player2;
+                    int rawScore = item.getSettlementGold();
+
+                    // === 道具效果套算 ===
+                    int finalScore = rawScore;
+                    GameConfig.MysteryReward mysteryReward = null;
+
+                    // 福袋特殊结算：6 种奖励等概率抽取，抽到金币才给金币
+                    if (item instanceof MysteryBag) {
+                        // 只抽一次奖励类型，结算与标注共用
+                        mysteryReward = GameConfig.MysteryReward.values()[
+                                ThreadLocalRandom.current().nextInt(GameConfig.MysteryReward.values().length)];
+                        if (mysteryReward == GameConfig.MysteryReward.MYSTERY_GOLD) {
+                            finalScore = ThreadLocalRandom.current().nextInt(
+                                    GameConfig.MYSTERY_GOLD_MIN, GameConfig.MYSTERY_GOLD_MAX + 1);
+                        } else {
+                            finalScore = 0;
+                        }
+                        applyMysteryReward(mysteryReward, grabber, owner.getPlayerId());
                     } else {
-                        player2.addScore(score);
+                        // 普通物品：钻石升级药水 / 幸运草套算
+                        if (item instanceof Diamond && grabber.hasDiamondBoost()) {
+                            finalScore *= GameConfig.DIAMOND_BOOST_MULTIPLIER;
+                        }
+                        if (grabber.hasLuckyClover()) {
+                            finalScore = (int) Math.round(finalScore * GameConfig.LUCKY_CLOVER_BONUS_RATE);
+                        }
                     }
+
+                    // 同时写入 GameManager 和 GameModel 双体系
+                    gameData.addScore(owner.getPlayerId(), finalScore);
+                    grabber.addScore(finalScore);
                     settled.add(item);
+
+                    // 结算瞬时标注：显示在吊机起点旁，2 秒后消失
+                    if (owner instanceof HookImpl) {
+                        HookImpl hookOwner = (HookImpl) owner;
+                        if (item instanceof MysteryBag && mysteryReward != null) {
+                            String labelText;
+                            if (mysteryReward == GameConfig.MysteryReward.MYSTERY_GOLD) {
+                                labelText = (finalScore >= 0 ? "+" : "") + finalScore;
+                            } else {
+                                labelText = "+" + mysteryReward.cnName();
+                            }
+                            hookOwner.setSettleLabel(labelText, mysteryReward, 2000);
+                        } else {
+                            String sign = finalScore >= 0 ? "+" : "";
+                            hookOwner.setSettleLabel(sign + finalScore, 2000);
+                        }
+                    }
                 }
             }
         }
@@ -228,5 +290,67 @@ public class GameManagerImpl implements GameManager, GameModel {
     @Override
     public void shutdown() {
         hookRetrieveExecutor.shutdownNow();
+    }
+
+    /**
+     * 玩家使用炸药触发爆炸效果。
+     * 若该玩家钩爪正携带物品 → 炸掉物品（从场景移除 + 清除 grabbedItem 引用）→ 钩爪变 RETRACTING 空钩收回。
+     * 若钩爪未携带物品 → 无效果（炸药已消耗）。
+     */
+    @Override
+    public void triggerExplosion(int playerId) {
+        Hook hook = playerId == 1 ? hookP1 : hookP2;
+        Item grabbed = hook.getGrabbedItem();
+        if (grabbed != null) {
+            // 炸掉物品：从场景移除
+            sceneItemList.remove(grabbed);
+            // 钩爪放弃物品（HookImpl.grabbedItem 需置 null）
+            // 这里通过 retractHook() + 状态切换让 hook 自行清理
+            hook.retractHook();
+            System.out.println(LogUtils.format("玩家" + playerId + " 炸药炸掉了 " + grabbed.getClass().getSimpleName()));
+        } else {
+            System.out.println(LogUtils.format("玩家" + playerId + " 炸药未命中（钩爪未携带物品）"));
+        }
+    }
+
+    /**
+     * 应用福袋随机道具奖励。
+     *
+     * @param reward  抽取到的奖励类型
+     * @param player  获得奖励的玩家
+     * @param playerId 玩家编号（日志用）
+     */
+    private void applyMysteryReward(GameConfig.MysteryReward reward, Player player, int playerId) {
+        String label = "玩家" + playerId + " 福袋开出 ";
+        switch (reward) {
+            case LUCKY_CLOVER:
+                player.grantLuckyClover();
+                System.out.println(LogUtils.format(label + "幸运草！本局收益 +50%"));
+                break;
+            case DIAMOND_BOOST:
+                player.grantDiamondBoost();
+                System.out.println(LogUtils.format(label + "钻石升级药水！钻石价值翻倍"));
+                break;
+            case STONE_BOOK:
+                player.grantStoneBook();
+                System.out.println(LogUtils.format(label + "石头收藏书！石头消除惩罚"));
+                break;
+            case MYSTERY_GOLD:
+                // 金币已在上方结算时发放（200~800 随机），这里不再重复加分
+                System.out.println(LogUtils.format(label + "金币！"));
+                break;
+            case DYNAMITE:
+                int added = player.addBomb(1);
+                if (added > 0) {
+                    System.out.println(LogUtils.format(label + "炸药！库存 +1"));
+                } else {
+                    System.out.println(LogUtils.format(label + "炸药！但库存已满，自动转为 +" + GameConfig.BOMB_FULL_AUTO_GOLD + " 金币"));
+                    player.addScore(GameConfig.BOMB_FULL_AUTO_GOLD);
+                }
+                break;
+            case POWER_POTION:
+                System.out.println(LogUtils.format(label + "强力药水（钩爪收回速度翻倍，预留实现）"));
+                break;
+        }
     }
 }
