@@ -55,10 +55,9 @@ public class GameManagerImpl implements GameManager {
                 Hook owner = itemOnHook(item) == 1 ? hookP1 : hookP2;
                 if (owner.getState() == HookState.SWINGING) {
                     item.setGrabbed(false);
-                    gameData.addScore(owner.getPlayerId(), item.getScore());
-                    if (item instanceof Bomb) {
-                        ((Bomb) item).triggerExplode();
-                    }
+                    // 原版：用 getSettlementGold 结算（石头=1金币）
+                    int score = item.getSettlementGold();
+                    gameData.addScore(owner.getPlayerId(), score);
                     settled.add(item);
                 }
             }

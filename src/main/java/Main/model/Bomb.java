@@ -1,26 +1,29 @@
-// FR-10 炸弹：被钩子勾住后触发爆炸，扣分 30（负分），立即清除自身
+// FR-10 炸弹：原版 feature/item 分支实现，负分物品(-150)，可被触发爆炸清除周围物品
 package Main.model;
 
 public class Bomb extends ItemImpl {
-    private boolean exploded;
+    private boolean exploded = false;
 
     public Bomb(double x, double y) {
-        super(x, y, -30, 3.0);
+        super(x, y, -150, 1.5);
     }
 
     @Override
     public void onGrab(Hook hook) {
-        // 被抓取时不立即爆炸，待 GameManager 在收回结算时统一触发（见 triggerExplode）
+        this.grabbed = true; // 原版：onGrab 设 grabbed=true
     }
 
     @Override
     public void updatePosition() {
-        // 炸弹静止在矿洞地图上，不需要自动移动
+        // 炸弹静止
     }
 
+    /**
+     * 原版：无参 triggerExplode，只标记已爆炸。
+     * 爆炸半径内物品的清除由 GameModelImpl/gameLoopTick 负责。
+     */
     public void triggerExplode() {
         exploded = true;
-        // 后续调用全局爆炸逻辑，清除150px半径内所有普通物品
     }
 
     public boolean isExploded() {

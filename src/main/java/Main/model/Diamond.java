@@ -2,7 +2,7 @@
 package Main.model;
 
 public class Diamond extends ItemImpl {
-    public Diamond(double x, double y) { super(x, y, 100, 1.0); }
+    public Diamond(double x, double y) { super(x, y, 200, 1.2); }
     @Override public void onGrab(Hook hook) {}
     @Override public void updatePosition() {}
 }

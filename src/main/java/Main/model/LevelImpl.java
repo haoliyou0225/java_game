@@ -19,8 +19,8 @@ public class LevelImpl implements Level {
     private static final double ITEM_ANGLE_MAX_OFFSET = 1.25;
     /** 物品角度朝画布外侧的最大偏移（弧度，按画布边界收窄防止出界） */
     private static final double ITEM_ANGLE_EDGE_OFFSET = 0.65;
-    /** 物品最低点距锚点的竖直偏移（像素） */
-    private static final double ITEM_Y_OFFSET = 40;
+    /** 物品 Y 坐标起始基准：与钩子锚点 Y 对齐，物品从锚点正下方开始分布 */
+    private static final double ITEM_Y_OFFSET = GameConfig.HOOK_ANCHOR_Y;
 
     private List<Item> itemPool;
 
@@ -51,13 +51,16 @@ public class LevelImpl implements Level {
         return itemPool;
     }
 
-    /** 随机生成一种物品 */
+    /** 随机生成一种物品（贴近原版 7 种：金块/大金块/钻石/石头/炸弹/福袋/鼢鼠） */
     private Item createRandomItem(Random rnd, double x, double y) {
-        switch (rnd.nextInt(4)) {
+        switch (rnd.nextInt(7)) {
             case 0: return new Gold(x, y);
-            case 1: return new Diamond(x, y);
-            case 2: return new Stone(x, y);
-            default: return new Bomb(x, y);
+            case 1: return new BigGold(x, y);
+            case 2: return new Diamond(x, y);
+            case 3: return new Stone(x, y);
+            case 4: return new Bomb(x, y);
+            case 5: return new MysteryBag(x, y);
+            default: return new Mole(x, y);
         }
     }
 

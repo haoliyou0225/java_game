@@ -132,9 +132,29 @@ public class HookImpl implements Hook {
         for (Item item : items) {
             CollisionResult result = checkCollisionItem(item);
             if (result.isHit()) {
+                item.onGrab(this);
+                if (item instanceof Bomb) {
+                    // 炸弹：碰到立即爆炸（无参 triggerExplode，对齐原版 feature/item）
+                    // 同时清除爆炸半径内所有普通物品
+                    ((Bomb) item).triggerExplode();
+                    double bx = item.getX(), by = item.getY();
+                    java.util.Iterator<Item> it = items.iterator();
+                    while (it.hasNext()) {
+                        Item target = it.next();
+                        if (target == item || target instanceof Bomb) continue;
+                        double dx = target.getX() - bx;
+                        double dy = target.getY() - by;
+                        if (Math.sqrt(dx * dx + dy * dy) <= GameConfig.TNT_EXPLOSION_RADIUS) {
+                            it.remove();
+                        }
+                    }
+                    grabbedItem = null;
+                    state = HookState.RETRACTING;
+                    return;
+                }
+                // 普通物品：携带收回
                 grabbedItem = item;
                 item.setGrabbed(true);
-                item.onGrab(this);
                 state = HookState.GRABBING;
                 return;
             }
@@ -177,4 +197,12 @@ public class HookImpl implements Hook {
     @Override public int getPlayerId() { return playerId; }
     @Override public Rope getRope() { return rope; }
     @Override public void setState(HookState state) { this.state = state; }
+
+    // ===== 渲染读取（UI 层 GameView 使用） =====
+    @Override public double getX() { return hookTip()[0]; }
+    @Override public double getY() { return hookTip()[1]; }
+    @Override public double getStartX() {
+        return playerId == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2;
+    }
+    @Override public double getStartY() { return GameConfig.HOOK_ANCHOR_Y; }
 }

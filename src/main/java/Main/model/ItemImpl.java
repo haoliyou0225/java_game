@@ -26,6 +26,8 @@ public abstract class ItemImpl implements Item {
     @Override public double getY() { return y; }
     @Override public int getScore() { return score; }
     @Override public double getWeight() { return weight; }
+    /** 默认碰撞/渲染半径，子类可按物品种类重写 */
+    @Override public double getRadius() { return 15; }
     @Override public boolean isGrabbed() { return grabbed; }
     @Override public void setX(double x) { this.x = x; }
     @Override public void setY(double y) { this.y = y; }

@@ -17,4 +17,14 @@ public interface Hook {
     int getPlayerId();
     Rope getRope();
     void setState(HookState state);
+
+    // ===== 渲染读取（供 UI 层 GameView 绘制绳索与钩爪头） =====
+    /** 钩尖当前 X 坐标 */
+    double getX();
+    /** 钩尖当前 Y 坐标 */
+    double getY();
+    /** 钩爪起点（锚点）X 坐标 */
+    double getStartX();
+    /** 钩爪起点（锚点）Y 坐标 */
+    double getStartY();
 }
