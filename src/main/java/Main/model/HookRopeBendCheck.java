@@ -158,9 +158,11 @@ public class HookRopeBendCheck extends SelfCheck {
         int frames = 0;
         while (hook.getState() != HookState.SWINGING && frames < 800) {
             hook.update(DT, List.of(gold, setup.mole), null);
-            // 携带的金块必须贴在钩尖上，一同沿折线原路返回
-            checkEq(hook.getX(), gold.getX(), 1e-9, "携带物品 X 应跟随钩尖");
-            checkEq(hook.getY(), gold.getY(), 1e-9, "携带物品 Y 应跟随钩尖");
+            // 携带的金块边缘挨钩心：物品中心 = 钩尖 + 沿绳方向×物品半径，一同沿折线原路返回
+            checkEq(hook.getX() + Math.cos(hook.getAngle()) * gold.getRadius(),
+                    gold.getX(), 1e-9, "携带物品 X 应沿绳方向偏移一个半径");
+            checkEq(hook.getY() + Math.sin(hook.getAngle()) * gold.getRadius(),
+                    gold.getY(), 1e-9, "携带物品 Y 应沿绳方向偏移一个半径");
             checkTrue(distToPolyline(hook.getX(), hook.getY(), polyline) < 1e-6,
                     "携带收回必须沿原折线路径");
             frames++;

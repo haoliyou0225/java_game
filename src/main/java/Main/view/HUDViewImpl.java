@@ -2,13 +2,17 @@
 package Main.view;
 
 import Main.config.Config;
+import Main.config.GameConfig;
 import Main.model.GameModel;
 import Main.model.Hook;
+import Main.model.HookState;
 import Main.model.Player;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
@@ -43,6 +47,28 @@ public class HUDViewImpl implements HUDView {
 
     /** HUD 根节点 */
     private final Pane root;
+
+    /** 矿工摇绳动画两帧（classpath 加载一次） */
+    private final Image minerFrame1 = loadMinerImage("/images/miner/minerAction1.png");
+    private final Image minerFrame2 = loadMinerImage("/images/miner/minerAction2.png");
+    /** 两个矿工节点（层级在 topbg 背景图之上） */
+    private final ImageView miner1 = new ImageView();
+    private final ImageView miner2 = new ImageView();
+    /** 矿工动画帧计时（120ms 切帧） */
+    private int animFrame = 0;
+    private long animLastTick = 0;
+    private static final long FRAME_INTERVAL_MS = 120;
+    /** 矿工显示尺寸与左脚对齐偏移（左脚在贴图中比例 45.5/126） */
+    private static final double MINER_SIZE = 80;
+    private static final double MINER_FOOT_RATIO = 45.5 / 126.0;
+
+    private static Image loadMinerImage(String path) {
+        try {
+            return new Image(HUDViewImpl.class.getResourceAsStream(path));
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     public HUDViewImpl() {
         root = new Pane();
@@ -100,9 +126,38 @@ public class HUDViewImpl implements HUDView {
         HBox hudBar = new HBox(p1Box, timeBox, p2Box);
         hudBar.setPrefSize(Config.WIDTH, Config.HUD_HEIGHT);
         hudBar.setAlignment(Pos.CENTER);
-        hudBar.setStyle("-fx-background-color: rgba(30, 19, 12, 0.92);");
+        // 背景透明：底层 ImageView 承载背景图，hudBar 只负责文字信息（文字描边仍保留）
+        hudBar.setStyle("-fx-background-color: transparent;");
+        hudBar.setMouseTransparent(false);
 
-        root.getChildren().add(hudBar);
+        // ---------- HUD 背景图 topbg.png（最底层，拉伸铺满 HUD 栏，鼠标穿透）----------
+        Image hudBgImage = new Image(
+                getClass().getResourceAsStream("/images/HUD/topbg.png"));
+        ImageView hudBg = new ImageView(hudBgImage);
+        hudBg.setFitWidth(Config.WIDTH);
+        hudBg.setFitHeight(Config.HUD_HEIGHT);
+        hudBg.setPreserveRatio(false);
+        hudBg.setMouseTransparent(true);
+
+        // ---------- 两个矿工（最顶层，站在 topbg 背景图上；鼠标穿透）----------
+        configureMiner(miner1, GameConfig.HOOK_ANCHOR_X_P1);
+        configureMiner(miner2, GameConfig.HOOK_ANCHOR_X_P2);
+
+        // 层级：背景图（底层）→ 文字栏 → 矿工（最上层，盖住背景图与绳头）
+        root.getChildren().addAll(hudBg, hudBar, miner1, miner2);
+    }
+
+    /** 配置矿工节点：80×80，左脚水平对齐锚点 X，脚底落在 topbg 底边附近（绳从脚下出来） */
+    private void configureMiner(ImageView miner, double anchorX) {
+        miner.setFitWidth(MINER_SIZE);
+        miner.setFitHeight(MINER_SIZE);
+        miner.setPreserveRatio(false);
+        miner.setMouseTransparent(true);
+        miner.setVisible(false);
+        // 水平：左脚（贴图比例 0.361 处）对齐绳索竖直线
+        miner.setLayoutX(anchorX - MINER_SIZE * MINER_FOOT_RATIO);
+        // 垂直：贴图内脚底距顶约 79.4px，令脚底落在 y≈88（topbg 底边/绳锚点附近）
+        miner.setLayoutY(Config.HUD_HEIGHT - 2 - 127.0 / 128.0 * MINER_SIZE);
     }
 
     @Override
@@ -127,6 +182,31 @@ public class HUDViewImpl implements HUDView {
         p1ItemLine2.setText(buildPersistItemLine(model.getPlayer1()));
         p2ItemLine1.setText(buildShortItemLine(model.getPlayer2(), model.getHook2()));
         p2ItemLine2.setText(buildPersistItemLine(model.getPlayer2()));
+
+        // 矿工摇绳动画：收回（空钩/携带）时两帧交替，其他状态停在第一帧
+        updateMiner(miner1, model.getHook1());
+        updateMiner(miner2, model.getHook2());
+    }
+
+    /** 按钩爪状态更新矿工贴图：GRABBING/RETRACTING 时播放两帧动画，否则静止帧 */
+    private void updateMiner(ImageView miner, Hook hook) {
+        if (minerFrame1 == null || hook == null) {
+            miner.setVisible(false);
+            return;
+        }
+        miner.setVisible(true);
+        HookState state = hook.getState();
+        if (minerFrame2 != null
+                && (state == HookState.GRABBING || state == HookState.RETRACTING)) {
+            long now = System.currentTimeMillis();
+            if (now - animLastTick >= FRAME_INTERVAL_MS) {
+                animFrame = 1 - animFrame;
+                animLastTick = now;
+            }
+            miner.setImage(animFrame == 0 ? minerFrame1 : minerFrame2);
+        } else {
+            miner.setImage(minerFrame1);
+        }
     }
 
     /**

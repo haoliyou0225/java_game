@@ -9,7 +9,6 @@ import Main.model.DiamondPig;
 import Main.model.GameModel;
 import Main.model.Gold;
 import Main.model.Hook;
-import Main.model.HookState;
 import Main.model.Item;
 import Main.model.MediumGold;
 import Main.model.MineMap;
@@ -39,10 +38,6 @@ public class GameViewImpl implements GameView {
     /** 钩爪贴图：用户提供的 hook(1).png，直接 file URL 加载 */
     private static final Image HOOK_IMAGE = loadFileImage("hook(1).png");
 
-    /** 矿工摇绳子动画：两帧交替 */
-    private static final Image MINER_FRAME_1 = loadFileImage("minerAction(1).png");
-    private static final Image MINER_FRAME_2 = loadFileImage("minerAction(2).png");
-
     private static Image loadFileImage(String name) {
         try {
             String dir = System.getProperty("user.dir").replace('\\', '/');
@@ -54,28 +49,25 @@ public class GameViewImpl implements GameView {
         }
     }
 
-    /** 矿工动画帧索引（0 或 1），静态共享，两矿工同步 */
-    private static int minerAnimFrame = 0;
-    private static long minerAnimLastTick = 0;
-    private static final long MINER_FRAME_INTERVAL_MS = 120;
-
-    private static Image currentMinerFrame() {
-        long now = System.currentTimeMillis();
-        if (now - minerAnimLastTick >= MINER_FRAME_INTERVAL_MS) {
-            minerAnimFrame = 1 - minerAnimFrame;
-            minerAnimLastTick = now;
-        }
-        return minerAnimFrame == 0 ? MINER_FRAME_1 : MINER_FRAME_2;
-    }
-
     private static final double GROUND_TOP = Config.HUD_HEIGHT;
     /** 顶部地面条高度 */
     private static final double GROUND_HEIGHT = 60;
 
     private final Canvas canvas;
 
+    /** 矿洞背景图（构造时从 classpath 加载一次，复用给每帧渲染；加载失败为 null 时回退纯色） */
+    private final Image caveBgImage;
+
     public GameViewImpl(Canvas canvas) {
         this.canvas = canvas;
+        Image bg = null;
+        try {
+            bg = new Image(getClass().getResourceAsStream("/images/background/mineBG1.png"));
+            if (bg.isError()) bg = null;
+        } catch (Exception ignored) {
+            bg = null;
+        }
+        this.caveBgImage = bg;
     }
 
     @Override
@@ -84,29 +76,24 @@ public class GameViewImpl implements GameView {
         double w = canvas.getWidth();
         double h = canvas.getHeight();
 
-        // 1. 顶部地面条（钩爪起点所在，HUD 下方）
+        // 1. 矿洞背景：优先 mineBG1.png 全屏拉伸，加载失败回退纯色矿洞
+        if (caveBgImage != null) {
+            gc.drawImage(caveBgImage, 0, 0, w, h);
+        } else {
+            gc.setFill(Color.rgb(60, 42, 30));
+            gc.fillRect(0, GROUND_TOP, w, h - GROUND_TOP);
+            gc.setFill(Color.rgb(38, 25, 17));
+            gc.fillRect(0, h - 60, w, 60);
+        }
+
+        // 2. 顶部地面条（钩爪起点站立平台，HUD 下方）
         gc.setFill(Color.rgb(139, 90, 43));
         gc.fillRect(0, GROUND_TOP, w, GROUND_HEIGHT);
 
-        // 2. 矿洞背景（深棕色）
-        gc.setFill(Color.rgb(60, 42, 30));
-        gc.fillRect(0, GROUND_TOP + GROUND_HEIGHT, w, h - GROUND_TOP - GROUND_HEIGHT);
-
-        // 3. 矿洞底部（更深的底色）
-        gc.setFill(Color.rgb(38, 25, 17));
-        gc.fillRect(0, h - 60, w, 60);
-
-        // 4. 矿洞边界（从 MineMap 接口读取）
+        // 3. 矿洞数据（不绘制描边，让背景图完整显示；边界仅用于物品生成与碰撞）
         MineMap mineMap = model.getMineMap();
-        if (mineMap != null) {
-            gc.setStroke(Color.rgb(220, 180, 120));
-            gc.setLineWidth(2);
-            gc.strokeRect(mineMap.getMinX(), mineMap.getMinY(),
-                    mineMap.getMaxX() - mineMap.getMinX(),
-                    mineMap.getMaxY() - mineMap.getMinY());
-        }
 
-        // 5. 所有物品（包括被钩住的——它们会跟着钩尖移动显示出来）
+        // 4. 所有物品（包括被钩住的——它们会跟着钩尖移动显示出来）
         if (mineMap != null && mineMap.getItems() != null) {
             for (Item item : mineMap.getItems()) {
                 double r = item.getRadius();
@@ -571,41 +558,19 @@ public class GameViewImpl implements GameView {
     }
 
     /**
-     * 绘制单个钩爪：地面上的起点标记、绳索、钩爪贴图（来自 huancun.png 精灵图）。
+     * 绘制单个钩爪：绳索 → 钩爪贴图。
+     * 矿工由 HUDViewImpl 以 ImageView 渲染在 topbg 之上（层级高于 Canvas）；
      * 钩爪贴图根据 getAngle() 旋转朝向。
      */
     private void drawHook(GraphicsContext gc, Hook hook, Color color) {
         if (hook == null) return;
 
-        // 起点位置画矿工（必须在地面条 y>=90 里，避开 HUD 深棕背景遮挡）
-        double minerSize = 80;
-        double mx = hook.getStartX() - minerSize / 2;
-        // 矿工顶部对齐地面条上沿，完整落在 y=90~170 区域
-        double my = GROUND_TOP;
-        Image minerImg = MINER_FRAME_1;
-        if (MINER_FRAME_1 != null && MINER_FRAME_2 != null) {
-            HookState s = hook.getState();
-            if (s == HookState.GRABBING || s == HookState.RETRACTING) {
-                minerImg = currentMinerFrame();
-            }
-        }
-        if (minerImg != null && minerImg.getWidth() > 0) {
-            gc.save();
-            gc.setImageSmoothing(false);
-            gc.drawImage(minerImg, mx, my, minerSize, minerSize);
-            gc.restore();
-        } else {
-            gc.setFill(color);
-            gc.fillRect(mx, my, minerSize, minerSize);
-        }
-
-        // 绳索（先画，贴图覆盖末端）
+        // 1. 绳索（HUD 层矿工会盖住绳头，视觉上绳从脚下卷绳器出来）
         gc.setStroke(color);
         gc.setLineWidth(3);
         gc.strokeLine(hook.getStartX(), hook.getStartY(), hook.getX(), hook.getY());
 
-        // 绳子末端画钩爪贴图
-        // 锚点 = 贴图底边中心对齐绳末端，贴图随角度旋转
+        // 2. 绳子末端画钩爪贴图（贴图中心对齐绳末端，随角度旋转）
         if (HOOK_IMAGE != null && !HOOK_IMAGE.isError() && HOOK_IMAGE.getWidth() > 0) {
             double s = 56;
             gc.save();
