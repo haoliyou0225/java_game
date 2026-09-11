@@ -47,6 +47,8 @@ public interface Hook {
     double getGrabOriginY();
     /** 进入眩晕：在当前碰撞点冻结 HOOK_STUN_DURATION_SEC 秒，松开携带物品，结束后自动空钩收回 */
     void stun();
+    /** 眩晕剩余秒数（未眩晕返回 0，供 HUD/渲染显示倒计时） */
+    double getStunRemaining();
     /** 炸药：炸毁当前携带的物品并立即空钩收回；返回被炸毁的物品（无携带返回 null） */
     Item detachCarriedItem();
 

@@ -281,12 +281,14 @@ public class HookImpl implements Hook {
         }
     }
 
-    /** 携带物品收回时，物品跟随钩尖移动 */
+    /** 携带物品收回时，物品边缘挨着钩爪中心 */
     private void dragItem() {
         if (grabbedItem == null) return;
         double[] tip = hookTip();
-        grabbedItem.setX(tip[0]);
-        grabbedItem.setY(tip[1]);
+        double r = grabbedItem.getRadius();
+        // 沿绳方向远离锚点偏移一个半径，让物品边缘刚好在钩尖
+        grabbedItem.setX(tip[0] + Math.cos(angle) * r);
+        grabbedItem.setY(tip[1] + Math.sin(angle) * r);
     }
 
     /**
@@ -384,6 +386,12 @@ public class HookImpl implements Hook {
         this.grabbedItem = null;
         this.stunTimer = GameConfig.HOOK_STUN_DURATION_SEC;
         this.state = HookState.STUNNED;
+    }
+
+    /** 眩晕剩余秒数 */
+    @Override
+    public double getStunRemaining() {
+        return stunTimer;
     }
 
     /** 炸药：炸毁携带物品并立即空钩收回；无携带返回 null */

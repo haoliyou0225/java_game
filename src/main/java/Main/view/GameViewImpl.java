@@ -9,6 +9,7 @@ import Main.model.DiamondPig;
 import Main.model.GameModel;
 import Main.model.Gold;
 import Main.model.Hook;
+import Main.model.HookState;
 import Main.model.Item;
 import Main.model.MediumGold;
 import Main.model.MineMap;
@@ -17,6 +18,7 @@ import Main.model.MysteryBag;
 import Main.model.Stone;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.RadialGradient;
@@ -34,7 +36,38 @@ import java.util.Random;
  */
 public class GameViewImpl implements GameView {
 
-    /** 顶部地面条上沿 Y（与 Config.HUD_HEIGHT 对齐，HUD 下方） */
+    /** 钩爪贴图：用户提供的 hook(1).png，直接 file URL 加载 */
+    private static final Image HOOK_IMAGE = loadFileImage("hook(1).png");
+
+    /** 矿工摇绳子动画：两帧交替 */
+    private static final Image MINER_FRAME_1 = loadFileImage("minerAction(1).png");
+    private static final Image MINER_FRAME_2 = loadFileImage("minerAction(2).png");
+
+    private static Image loadFileImage(String name) {
+        try {
+            String dir = System.getProperty("user.dir").replace('\\', '/');
+            Image img = new Image("file:" + dir + "/resources/Resources/" + name);
+            if (img.isError()) return null;
+            return img;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 矿工动画帧索引（0 或 1），静态共享，两矿工同步 */
+    private static int minerAnimFrame = 0;
+    private static long minerAnimLastTick = 0;
+    private static final long MINER_FRAME_INTERVAL_MS = 120;
+
+    private static Image currentMinerFrame() {
+        long now = System.currentTimeMillis();
+        if (now - minerAnimLastTick >= MINER_FRAME_INTERVAL_MS) {
+            minerAnimFrame = 1 - minerAnimFrame;
+            minerAnimLastTick = now;
+        }
+        return minerAnimFrame == 0 ? MINER_FRAME_1 : MINER_FRAME_2;
+    }
+
     private static final double GROUND_TOP = Config.HUD_HEIGHT;
     /** 顶部地面条高度 */
     private static final double GROUND_HEIGHT = 60;
@@ -538,20 +571,52 @@ public class GameViewImpl implements GameView {
     }
 
     /**
-     * 绘制单个钩爪：地面上的起点标记、绳索、钩爪头圆点。
+     * 绘制单个钩爪：地面上的起点标记、绳索、钩爪贴图（来自 huancun.png 精灵图）。
+     * 钩爪贴图根据 getAngle() 旋转朝向。
      */
     private void drawHook(GraphicsContext gc, Hook hook, Color color) {
         if (hook == null) return;
 
-        gc.setFill(color);
-        gc.fillRect(hook.getStartX() - 14, hook.getStartY() - 10, 28, 20);
+        // 起点位置画矿工（必须在地面条 y>=90 里，避开 HUD 深棕背景遮挡）
+        double minerSize = 80;
+        double mx = hook.getStartX() - minerSize / 2;
+        // 矿工顶部对齐地面条上沿，完整落在 y=90~170 区域
+        double my = GROUND_TOP;
+        Image minerImg = MINER_FRAME_1;
+        if (MINER_FRAME_1 != null && MINER_FRAME_2 != null) {
+            HookState s = hook.getState();
+            if (s == HookState.GRABBING || s == HookState.RETRACTING) {
+                minerImg = currentMinerFrame();
+            }
+        }
+        if (minerImg != null && minerImg.getWidth() > 0) {
+            gc.save();
+            gc.setImageSmoothing(false);
+            gc.drawImage(minerImg, mx, my, minerSize, minerSize);
+            gc.restore();
+        } else {
+            gc.setFill(color);
+            gc.fillRect(mx, my, minerSize, minerSize);
+        }
 
+        // 绳索（先画，贴图覆盖末端）
         gc.setStroke(color);
         gc.setLineWidth(3);
         gc.strokeLine(hook.getStartX(), hook.getStartY(), hook.getX(), hook.getY());
 
-        gc.setFill(color);
-        gc.fillOval(hook.getX() - 8, hook.getY() - 8, 16, 16);
+        // 绳子末端画钩爪贴图
+        // 锚点 = 贴图底边中心对齐绳末端，贴图随角度旋转
+        if (HOOK_IMAGE != null && !HOOK_IMAGE.isError() && HOOK_IMAGE.getWidth() > 0) {
+            double s = 56;
+            gc.save();
+            gc.translate(hook.getX(), hook.getY());
+            gc.rotate(Math.toDegrees(hook.getAngle() - Math.PI / 2));
+            gc.drawImage(HOOK_IMAGE, -s / 2, -s / 2, s, s);
+            gc.restore();
+        } else {
+            gc.setFill(color);
+            gc.fillOval(hook.getX() - 8, hook.getY() - 8, 16, 16);
+        }
 
         // 结算瞬时飘字
         long now = System.currentTimeMillis();

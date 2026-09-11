@@ -209,6 +209,7 @@ public final class DummyDataFactory {
         @Override public double getGrabOriginX() { return 0; }
         @Override public double getGrabOriginY() { return 0; }
         @Override public void stun() { }
+        @Override public double getStunRemaining() { return 0; }
         @Override public Item detachCarriedItem() { return null; }
         // FR-16 冰冻箱 / 强力药水（假实现，空操作/默认值）
         @Override public void freeze(double seconds) { }
