@@ -17,6 +17,7 @@ import Main.model.MysteryBag;
 import Main.model.Stone;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.RadialGradient;
@@ -41,8 +42,14 @@ public class GameViewImpl implements GameView {
 
     private final Canvas canvas;
 
+    /** 矿洞背景图（构造时加载一次，避免每帧重复加载资源） */
+    private final Image caveBgImage;
+
     public GameViewImpl(Canvas canvas) {
         this.canvas = canvas;
+        // 加载矿洞背景图 mineBG1.png（仅加载一次，复用给每帧渲染）
+        this.caveBgImage = new Image(
+                getClass().getResourceAsStream("/images/background/mineBG1.png"));
     }
 
     @Override
@@ -51,27 +58,15 @@ public class GameViewImpl implements GameView {
         double w = canvas.getWidth();
         double h = canvas.getHeight();
 
-        // 1. 顶部地面条（钩爪起点所在，HUD 下方）
+        // 1. 矿洞背景图全屏覆盖：mineBG1.png 拉伸填充整个画布
+        gc.drawImage(caveBgImage, 0, 0, w, h);
+
+        // 2. 顶部地面条（钩爪起点所在平台，HUD 下方）：恢复绘制，保证钩子有可见的站立平台
         gc.setFill(Color.rgb(139, 90, 43));
         gc.fillRect(0, GROUND_TOP, w, GROUND_HEIGHT);
 
-        // 2. 矿洞背景（深棕色）
-        gc.setFill(Color.rgb(60, 42, 30));
-        gc.fillRect(0, GROUND_TOP + GROUND_HEIGHT, w, h - GROUND_TOP - GROUND_HEIGHT);
-
-        // 3. 矿洞底部（更深的底色）
-        gc.setFill(Color.rgb(38, 25, 17));
-        gc.fillRect(0, h - 60, w, 60);
-
-        // 4. 矿洞边界（从 MineMap 接口读取）
+        // 4. 矿洞边界：保留 MineMap 读取但不绘制描边（透明，让背景图完整显示）
         MineMap mineMap = model.getMineMap();
-        if (mineMap != null) {
-            gc.setStroke(Color.rgb(220, 180, 120));
-            gc.setLineWidth(2);
-            gc.strokeRect(mineMap.getMinX(), mineMap.getMinY(),
-                    mineMap.getMaxX() - mineMap.getMinX(),
-                    mineMap.getMaxY() - mineMap.getMinY());
-        }
 
         // 5. 所有物品（包括被钩住的——它们会跟着钩尖移动显示出来）
         if (mineMap != null && mineMap.getItems() != null) {

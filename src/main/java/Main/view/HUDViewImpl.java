@@ -9,6 +9,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
@@ -48,61 +50,73 @@ public class HUDViewImpl implements HUDView {
         root = new Pane();
         root.setPickOnBounds(false); // 不拦截鼠标事件
 
-        // ---------- 左栏：玩家1分数 + 道具两行 ----------
-        Label p1Title = new Label("P1");
-        p1Title.setStyle("-fx-font-size: 16px; -fx-text-fill: #8ec9ff;");
+        // 文字描边效果（深色阴影，让亮色文字在任何背景上都清晰可读）
+        final String OUTLINE = "-fx-effect: dropshadow(one-pass-box, #000000, 2, 1.0, 1, 1);";
 
+        // ---------- 左栏：玩家1分数 + 道具两行（删除多余 P1 标题，整体上移）----------
         p1ScoreLabel = new Label("P1: $0");
         p1ScoreLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; "
-                + "-fx-text-fill: #5db0ff;");
+                + "-fx-text-fill: #5db0ff; " + OUTLINE);
 
         p1ItemLine1 = new Label("");
-        p1ItemLine1.setStyle("-fx-font-size: 12px; -fx-text-fill: #9fd0ff;");
+        p1ItemLine1.setStyle("-fx-font-size: 12px; -fx-text-fill: #9fd0ff; " + OUTLINE);
         p1ItemLine2 = new Label("");
-        p1ItemLine2.setStyle("-fx-font-size: 12px; -fx-text-fill: #9fd0ff;");
+        p1ItemLine2.setStyle("-fx-font-size: 12px; -fx-text-fill: #9fd0ff; " + OUTLINE);
 
-        VBox p1Box = new VBox(0, p1Title, p1ScoreLabel, p1ItemLine1, p1ItemLine2);
+        VBox p1Box = new VBox(0, p1ScoreLabel, p1ItemLine1, p1ItemLine2);
         p1Box.setAlignment(Pos.CENTER_LEFT);
         p1Box.setPrefWidth(Config.WIDTH / 3.0);
-        p1Box.setPadding(new Insets(0, 0, 0, 36));
+        // 负 top padding 上移，补偿删除标题后多出的空间
+        p1Box.setPadding(new Insets(-8, 0, 0, 36));
 
         // ---------- 中栏：剩余时间 ----------
         Label timeTitle = new Label("剩余时间");
-        timeTitle.setStyle("-fx-font-size: 16px; -fx-text-fill: #e8c87a;");
+        timeTitle.setStyle("-fx-font-size: 16px; -fx-text-fill: #e8c87a; " + OUTLINE);
 
         timeLabel = new Label("90");
         timeLabel.setStyle("-fx-font-size: 40px; -fx-font-weight: bold; "
-                + "-fx-text-fill: #ffe259;");
+                + "-fx-text-fill: #ffe259; " + OUTLINE);
 
         VBox timeBox = new VBox(0, timeTitle, timeLabel);
         timeBox.setAlignment(Pos.CENTER);
         timeBox.setPrefWidth(Config.WIDTH / 3.0);
 
-        // ---------- 右栏：玩家2分数 + 道具两行 ----------
-        Label p2Title = new Label("P2");
-        p2Title.setStyle("-fx-font-size: 16px; -fx-text-fill: #ff9d9d;");
-
+        // ---------- 右栏：玩家2分数 + 道具两行（删除多余 P2 标题，整体上移）----------
         p2ScoreLabel = new Label("P2: $0");
         p2ScoreLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; "
-                + "-fx-text-fill: #ff6b6b;");
+                + "-fx-text-fill: #ff6b6b; " + OUTLINE);
 
         p2ItemLine1 = new Label("");
-        p2ItemLine1.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffb3b3;");
+        p2ItemLine1.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffb3b3; " + OUTLINE);
         p2ItemLine2 = new Label("");
-        p2ItemLine2.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffb3b3;");
+        p2ItemLine2.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffb3b3; " + OUTLINE);
 
-        VBox p2Box = new VBox(0, p2Title, p2ScoreLabel, p2ItemLine1, p2ItemLine2);
+        VBox p2Box = new VBox(0, p2ScoreLabel, p2ItemLine1, p2ItemLine2);
         p2Box.setAlignment(Pos.CENTER_RIGHT);
         p2Box.setPrefWidth(Config.WIDTH / 3.0);
-        p2Box.setPadding(new Insets(0, 36, 0, 0));
+        p2Box.setPadding(new Insets(-8, 36, 0, 0));
 
         // ---------- 组装三栏 HUD ----------
         HBox hudBar = new HBox(p1Box, timeBox, p2Box);
         hudBar.setPrefSize(Config.WIDTH, Config.HUD_HEIGHT);
         hudBar.setAlignment(Pos.CENTER);
-        hudBar.setStyle("-fx-background-color: rgba(30, 19, 12, 0.92);");
+        // 背景透明：底层 ImageView 承载背景图，hudBar 只负责文字信息
+        hudBar.setStyle("-fx-background-color: transparent;");
+        // hudBar 不拦截背景图下方的鼠标事件，但保持自身文字可点可选
+        hudBar.setMouseTransparent(false);
 
-        root.getChildren().add(hudBar);
+        // ---------- HUD 背景图（最底层，不影响上方文字信息显示）----------
+        Image hudBgImage = new Image(
+                getClass().getResourceAsStream("/images/HUD/topbg.png"));
+        ImageView hudBg = new ImageView(hudBgImage);
+        // 拉伸到 HUD 区域宽高（Config.WIDTH × Config.HUD_HEIGHT）
+        hudBg.setFitWidth(Config.WIDTH);
+        hudBg.setFitHeight(Config.HUD_HEIGHT);
+        hudBg.setPreserveRatio(false); // 拉伸填充，与 HUD 栏完全重合
+        hudBg.setMouseTransparent(true); // 背景图不拦截鼠标，事件穿透到下方游戏画面
+
+        // 先放背景图（底层），再放 hudBar（顶层文字信息），层级正确
+        root.getChildren().addAll(hudBg, hudBar);
     }
 
     @Override
