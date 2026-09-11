@@ -5,10 +5,10 @@ package Main.controller;
 import Main.config.Config;
 import Main.config.GameConfig;
 import Main.model.*;
-import Main.util.LogUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
  * 每帧调度 Hook/Item 更新，处理碰撞、计分、胜负判定
  * 同时作为 UI 层 GameModel 接口的唯一实现，Main.java 直接 new 本类
  */
-public class GameManagerImpl implements GameManager, GameModel {
+public class GameManagerImpl implements GameManager, GameModel, AutoCloseable {
 
     // ===== GameManager 原版字段 =====
     private Hook hookP1;
@@ -44,6 +44,9 @@ public class GameManagerImpl implements GameManager, GameModel {
                 t.setDaemon(true);
                 return t;
             });
+
+    /** FR-08 对局提前结束回调（物品清空且双钩均 SWINGING 时触发） */
+    private Runnable onGameEnd;
 
     public GameManagerImpl() {
         // hook 原版初始化
@@ -110,27 +113,11 @@ public class GameManagerImpl implements GameManager, GameModel {
         hookP1.update(deltaTime, sceneItemList, hookP2);
         hookP2.update(deltaTime, sceneItemList, hookP1);
 
-        // 1.1 读取钩子待结算分数（目前仅福袋/特殊标注使用，TNT 炸药桶已改为只爆炸不扣分，settleScore 恒为 0 自动跳过）
-        if (hookP1 instanceof HookImpl) {
-            HookImpl h1 = (HookImpl) hookP1;
-            int sc1 = h1.getSettleScore();
-            if (sc1 != 0) {
-                gameData.addScore(1, sc1);
-                player1.addScore(sc1);
-                h1.clearSettleScore();
-            }
-        }
-        if (hookP2 instanceof HookImpl) {
-            HookImpl h2 = (HookImpl) hookP2;
-            int sc2 = h2.getSettleScore();
-            if (sc2 != 0) {
-                gameData.addScore(2, sc2);
-                player2.addScore(sc2);
-                h2.clearSettleScore();
-            }
-        }
+        // 1.5 双钩交互：50ms 抢夺窗口判定 + 钩尖直接相撞 → 双方 STUNNED 2 秒
+        resolveHookConflict();
 
         // 2. 物品位置更新 + 携带物品收回完成时结算分数
+        //    普通物品走 FR-17 结算链；福袋走 FR-14（先必给金币，再加权抽额外奖励入库存）
         List<Item> settled = new ArrayList<>();
         for (Item item : sceneItemList) {
             item.updatePosition();
@@ -139,53 +126,38 @@ public class GameManagerImpl implements GameManager, GameModel {
                 if (owner.getState() == HookState.SWINGING) {
                     item.setGrabbed(false);
                     Player grabber = owner.getPlayerId() == 1 ? player1 : player2;
-                    int rawScore = item.getSettlementGold();
 
-                    // === 道具效果套算 ===
-                    int finalScore = rawScore;
-                    GameConfig.MysteryReward mysteryReward = null;
-
-                    // 福袋特殊结算：6 种奖励等概率抽取，抽到金币才给金币
+                    int finalScore;
+                    GameConfig.MysteryReward reward = null;
                     if (item instanceof MysteryBag) {
-                        // 只抽一次奖励类型，结算与标注共用
-                        mysteryReward = GameConfig.MysteryReward.values()[
-                                ThreadLocalRandom.current().nextInt(GameConfig.MysteryReward.values().length)];
-                        if (mysteryReward == GameConfig.MysteryReward.MYSTERY_GOLD) {
-                            finalScore = ThreadLocalRandom.current().nextInt(
-                                    GameConfig.MYSTERY_GOLD_MIN, GameConfig.MYSTERY_GOLD_MAX + 1);
-                        } else {
-                            finalScore = 0;
-                        }
-                        applyMysteryReward(mysteryReward, grabber, owner.getPlayerId());
+                        // FR-14：福袋带回起点立即结算
+                        // ① 先发放生成时预计算的 100~800 金币（基础收益，幸运草可加成）
+                        int baseGold = item.getScore();
+                        int baseAfterClover = grabber.hasLuckyClover()
+                                ? (int) Math.round(baseGold * GameConfig.LUCKY_CLOVER_BONUS_RATE)
+                                : baseGold;
+                        // ② 再按 35/35/20/10 加权抽取额外奖励，道具自动入库存，奖励附带金币
+                        reward = rollBagExtraReward(ThreadLocalRandom.current());
+                        int extraGold = grantBagExtra(reward, grabber, ThreadLocalRandom.current());
+                        finalScore = baseAfterClover + extraGold;
                     } else {
-                        // 普通物品：钻石升级药水 / 幸运草套算
-                        if (item instanceof Diamond && grabber.hasDiamondBoost()) {
-                            finalScore *= GameConfig.DIAMOND_BOOST_MULTIPLIER;
-                        }
-                        if (grabber.hasLuckyClover()) {
-                            finalScore = (int) Math.round(finalScore * GameConfig.LUCKY_CLOVER_BONUS_RATE);
-                        }
+                        // FR-17：基础价值 → 石头×3 → 钻石×2 → 幸运草×1.5 → 四舍五入
+                        finalScore = settleNormalItem(item, grabber);
                     }
 
-                    // 同时写入 GameManager 和 GameModel 双体系
+                    // 写入 GameManager 和 GameModel 双体系
                     gameData.addScore(owner.getPlayerId(), finalScore);
                     grabber.addScore(finalScore);
                     settled.add(item);
 
-                    // 结算瞬时标注：显示在吊机起点旁，2 秒后消失
+                    // 结算瞬时飘字（锚点旁显示 2 秒）
                     if (owner instanceof HookImpl) {
                         HookImpl hookOwner = (HookImpl) owner;
-                        if (item instanceof MysteryBag && mysteryReward != null) {
-                            String labelText;
-                            if (mysteryReward == GameConfig.MysteryReward.MYSTERY_GOLD) {
-                                labelText = (finalScore >= 0 ? "+" : "") + finalScore;
-                            } else {
-                                labelText = "+" + mysteryReward.cnName();
-                            }
-                            hookOwner.setSettleLabel(labelText, mysteryReward, 2000);
+                        if (item instanceof MysteryBag && reward != null) {
+                            hookOwner.setSettleLabel("+" + finalScore + " " + reward.cnName(),
+                                    reward, 2000);
                         } else {
-                            String sign = finalScore >= 0 ? "+" : "";
-                            hookOwner.setSettleLabel(sign + finalScore, 2000);
+                            hookOwner.setSettleLabel((finalScore >= 0 ? "+" : "") + finalScore, 2000);
                         }
                     }
                 }
@@ -195,6 +167,17 @@ public class GameManagerImpl implements GameManager, GameModel {
 
         // 3. 移除已爆炸的炸弹
         sceneItemList.removeIf(i -> (i instanceof Bomb && ((Bomb) i).isExploded()));
+
+        // 3.5 FR-08 自动结束：场上可抓取物品全部清空，且双方钩爪均回到 SWINGING → 立即结束
+        if (sceneItemList.isEmpty()
+                && hookP1.getState() == HookState.SWINGING
+                && hookP2.getState() == HookState.SWINGING) {
+            setState(GameState.FINISHED);
+            if (onGameEnd != null) {
+                onGameEnd.run();
+            }
+            return;
+        }
 
         // 4. GameManager 原版每秒倒计时（GameTimerImpl 也在倒计时，双重保障）
         if (Math.random() < deltaTime) {
@@ -227,6 +210,153 @@ public class GameManagerImpl implements GameManager, GameModel {
         if (hookP1.ownsItem(item)) return 1;
         if (hookP2.ownsItem(item)) return 2;
         return 1;
+    }
+
+    /**
+     * 双钩冲突裁决（规格 FR-12）：
+     * 1) 抢夺：双钩在 ≤50ms 窗口命中同一物品 → 物品弹回原位，双方在碰撞点 STUNNED 2 秒
+     * 2) 钩尖直接相撞：双方 STUNNED 2 秒，携带中的物品在当前点松脱落回矿洞
+     * STUNNED 期间不再重复触发（避免眩晕计时被刷新导致永远无法恢复）
+     */
+    private void resolveHookConflict() {
+        // 已眩晕或被冰冻的钩子运动暂停，不参与新的冲突判定（FR-07/FR-16）
+        if (hookP1.getState() == HookState.STUNNED || hookP2.getState() == HookState.STUNNED
+                || hookP1.getState() == HookState.FROZEN || hookP2.getState() == HookState.FROZEN) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        Item i1 = hookP1.getGrabbedItem();
+        Item i2 = hookP2.getGrabbedItem();
+
+        // === 抢夺判定：同一物品在 50ms 窗口内被双钩命中 ===
+        Item stolen = null;
+        if (i1 != null && i1 == i2) {
+            stolen = i1;
+        } else if (i1 != null
+                && hookP2.getState() == HookState.THROWING
+                && hookP2.tipHits(i1)
+                && now - hookP1.getGrabTimestampMs() <= GameConfig.HOOK_STEAL_WINDOW_MS) {
+            stolen = i1;
+        } else if (i2 != null
+                && hookP1.getState() == HookState.THROWING
+                && hookP1.tipHits(i2)
+                && now - hookP2.getGrabTimestampMs() <= GameConfig.HOOK_STEAL_WINDOW_MS) {
+            stolen = i2;
+        }
+
+        if (stolen != null) {
+            // 物品弹回被抓取前的原位
+            stolen.setGrabbed(false);
+            stolen.setX(hookP1.ownsItem(stolen) ? hookP1.getGrabOriginX() : hookP2.getGrabOriginX());
+            stolen.setY(hookP1.ownsItem(stolen) ? hookP1.getGrabOriginY() : hookP2.getGrabOriginY());
+            // 双方在碰撞点停滞 2 秒，之后自动空钩收回起点恢复摇摆
+            hookP1.stun();
+            hookP2.stun();
+            return;
+        }
+
+        // === 钩尖直接相撞（双钩均已伸出矿洞时才判定，钟摆状态相距 640px 不可能相碰） ===
+        boolean extended1 = hookP1.getRopeLength() > 80;
+        boolean extended2 = hookP2.getRopeLength() > 80;
+        if (extended1 && extended2 && hookP1.checkCollisionOtherHook(hookP2)) {
+            // 携带中的物品在当前碰撞点松脱，落回矿洞（保持可再抓取）
+            releaseCarriedAtCurrentPoint(hookP1);
+            releaseCarriedAtCurrentPoint(hookP2);
+            hookP1.stun();
+            hookP2.stun();
+        }
+    }
+
+    /** 眩晕时松开携带物品：物品留在钩尖当前坐标，恢复未抓取状态可被再次抓取 */
+    private void releaseCarriedAtCurrentPoint(Hook hook) {
+        Item carried = hook.getGrabbedItem();
+        if (carried != null) {
+            carried.setGrabbed(false);
+        }
+    }
+
+    /**
+     * FR-14 福袋额外奖励加权抽奖：35% 金币 / 35% 炸药 / 20% 短时道具 / 10% 持续道具。
+     * 包级静态以便单元测试直接验证权重分布。
+     */
+    static GameConfig.MysteryReward rollBagExtraReward(Random rnd) {
+        int roll = rnd.nextInt(100);
+        if (roll < GameConfig.BAG_WEIGHT_GOLD) {
+            return GameConfig.MysteryReward.MYSTERY_GOLD;
+        } else if (roll < GameConfig.BAG_WEIGHT_GOLD + GameConfig.BAG_WEIGHT_DYNAMITE) {
+            return GameConfig.MysteryReward.DYNAMITE;
+        } else if (roll < GameConfig.BAG_WEIGHT_GOLD + GameConfig.BAG_WEIGHT_DYNAMITE
+                + GameConfig.BAG_WEIGHT_SHORT_ITEM) {
+            // 20% 短时道具：强力药水 / 冰冻箱等概率
+            return rnd.nextBoolean()
+                    ? GameConfig.MysteryReward.POWER_POTION
+                    : GameConfig.MysteryReward.FREEZE_BOX;
+        } else {
+            // 10% 持续道具：幸运草 / 钻石药水 / 石头书等概率
+            switch (rnd.nextInt(3)) {
+                case 0: return GameConfig.MysteryReward.LUCKY_CLOVER;
+                case 1: return GameConfig.MysteryReward.DIAMOND_BOOST;
+                default: return GameConfig.MysteryReward.STONE_BOOK;
+            }
+        }
+    }
+
+    /**
+     * FR-17 普通物品结算链：基础价值 → 石头×3（石头书）→ 钻石×2（钻石药水）→ 幸运草×1.5 → 四舍五入。
+     * 幸运草不作用于道具库存溢出转化的 50 金币（该部分在 grantBagExtra 中直接发放）。
+     * 包级静态以便单元测试验证结算顺序与倍率。
+     */
+    static int settleNormalItem(Item item, Player player) {
+        int value = item.getSettlementGold();
+        if (item instanceof Stone && player.hasStoneBook()) {
+            value *= GameConfig.STONE_BOOK_MULTIPLIER;
+        }
+        if (item instanceof Diamond && player.hasDiamondBoost()) {
+            value *= GameConfig.DIAMOND_BOOST_MULTIPLIER;
+        }
+        if (player.hasLuckyClover()) {
+            value = (int) Math.round(value * GameConfig.LUCKY_CLOVER_BONUS_RATE);
+        }
+        return value;
+    }
+
+    /**
+     * FR-14/FR-15/FR-18 福袋额外奖励发放：道具自动入库存；
+     * 炸药满 3、短时道具满 5、持续道具已激活时，再次获得自动转为 50 金币。
+     * 包级静态以便单元测试验证库存溢出转化。
+     *
+     * @return 本次奖励附带的金币（金币档为 100~800 随机；溢出转化为 50；道具正常入库为 0）
+     */
+    static int grantBagExtra(GameConfig.MysteryReward reward, Player player, Random rnd) {
+        switch (reward) {
+            case MYSTERY_GOLD:
+                // FR-14：金币档发放 100~800 随机金币
+                return GameConfig.MYSTERY_BAG_MIN_GOLD
+                        + rnd.nextInt(GameConfig.MYSTERY_BAG_MAX_GOLD - GameConfig.MYSTERY_BAG_MIN_GOLD + 1);
+            case DYNAMITE:
+                return player.addDynamite(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
+            case POWER_POTION:
+                return player.addPowerPotion(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
+            case FREEZE_BOX:
+                return player.addFreezeBox(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
+            case LUCKY_CLOVER:
+                return player.grantLuckyClover() ? 0 : GameConfig.ITEM_DUP_AUTO_GOLD;
+            case DIAMOND_BOOST:
+                return player.grantDiamondBoost() ? 0 : GameConfig.ITEM_DUP_AUTO_GOLD;
+            case STONE_BOOK:
+                return player.grantStoneBook() ? 0 : GameConfig.ITEM_DUP_AUTO_GOLD;
+            default:
+                return 0;
+        }
+    }
+
+    /** 从场景移除物品（炸药炸毁钩上携带物时调用） */
+    @Override
+    public void removeItem(Item item) {
+        if (item != null) {
+            sceneItemList.remove(item);
+        }
     }
 
     // ===== GameManager Getter =====
@@ -292,65 +422,15 @@ public class GameManagerImpl implements GameManager, GameModel {
         hookRetrieveExecutor.shutdownNow();
     }
 
-    /**
-     * 玩家使用炸药触发爆炸效果。
-     * 若该玩家钩爪正携带物品 → 炸掉物品（从场景移除 + 清除 grabbedItem 引用）→ 钩爪变 RETRACTING 空钩收回。
-     * 若钩爪未携带物品 → 无效果（炸药已消耗）。
-     */
+    /** 兼容 try-with-resources：行为等价于 shutdown() */
     @Override
-    public void triggerExplosion(int playerId) {
-        Hook hook = playerId == 1 ? hookP1 : hookP2;
-        Item grabbed = hook.getGrabbedItem();
-        if (grabbed != null) {
-            // 炸掉物品：从场景移除
-            sceneItemList.remove(grabbed);
-            // 钩爪放弃物品（HookImpl.grabbedItem 需置 null）
-            // 这里通过 retractHook() + 状态切换让 hook 自行清理
-            hook.retractHook();
-            System.out.println(LogUtils.format("玩家" + playerId + " 炸药炸掉了 " + grabbed.getClass().getSimpleName()));
-        } else {
-            System.out.println(LogUtils.format("玩家" + playerId + " 炸药未命中（钩爪未携带物品）"));
-        }
+    public void close() {
+        shutdown();
     }
 
-    /**
-     * 应用福袋随机道具奖励。
-     *
-     * @param reward  抽取到的奖励类型
-     * @param player  获得奖励的玩家
-     * @param playerId 玩家编号（日志用）
-     */
-    private void applyMysteryReward(GameConfig.MysteryReward reward, Player player, int playerId) {
-        String label = "玩家" + playerId + " 福袋开出 ";
-        switch (reward) {
-            case LUCKY_CLOVER:
-                player.grantLuckyClover();
-                System.out.println(LogUtils.format(label + "幸运草！本局收益 +50%"));
-                break;
-            case DIAMOND_BOOST:
-                player.grantDiamondBoost();
-                System.out.println(LogUtils.format(label + "钻石升级药水！钻石价值翻倍"));
-                break;
-            case STONE_BOOK:
-                player.grantStoneBook();
-                System.out.println(LogUtils.format(label + "石头收藏书！石头消除惩罚"));
-                break;
-            case MYSTERY_GOLD:
-                // 金币已在上方结算时发放（200~800 随机），这里不再重复加分
-                System.out.println(LogUtils.format(label + "金币！"));
-                break;
-            case DYNAMITE:
-                int added = player.addBomb(1);
-                if (added > 0) {
-                    System.out.println(LogUtils.format(label + "炸药！库存 +1"));
-                } else {
-                    System.out.println(LogUtils.format(label + "炸药！但库存已满，自动转为 +" + GameConfig.BOMB_FULL_AUTO_GOLD + " 金币"));
-                    player.addScore(GameConfig.BOMB_FULL_AUTO_GOLD);
-                }
-                break;
-            case POWER_POTION:
-                System.out.println(LogUtils.format(label + "强力药水（钩爪收回速度翻倍，预留实现）"));
-                break;
-        }
+    /** FR-08 注册对局提前结束回调 */
+    @Override
+    public void setOnGameEnd(Runnable action) {
+        this.onGameEnd = action;
     }
 }

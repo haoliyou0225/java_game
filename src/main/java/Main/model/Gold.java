@@ -1,8 +1,8 @@
-// FR-07 金块：分数 50、重量 2.0，默认普通物品
+// FR-10 小金块：25 金，收回耗时 1.2s（轻档）
 package Main.model;
 
 public class Gold extends ItemImpl {
-    public Gold(double x, double y) { super(x, y, 100, 1.0); }
+    public Gold(double x, double y) { super(x, y, 25, 1.2); }
     @Override public void onGrab(Hook hook) {}
     @Override public void updatePosition() {}
 }

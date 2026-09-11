@@ -92,8 +92,8 @@ public class Main extends Application {
         hudView.render(model); // 初始显示
 
         // FR-18：双人按键独立监听（View/Main 层监听 JavaFX 键盘事件，转发给 controller）
-        // S → 玩家1释放钩爪；A → 玩家1使用炸药
-        // ↓ → 玩家2释放钩爪；L → 玩家2使用炸药
+        // P1：S 抛钩 / W 炸药 / A 强力药水 / D 冰冻箱
+        // P2：↓ 抛钩 / ↑ 炸药 / Num1 强力药水 / Num2 冰冻箱（主键盘 1/2 为无小键盘时的别名）
         // ESC → 暂停/继续（双方共用）
         InputController inputController = new InputControllerImpl(model);
 
@@ -106,12 +106,20 @@ public class Main extends Application {
                 KeyCode code = event.getCode();
                 if (code == KeyCode.S) {
                     inputController.player1ReleaseHook();   // 玩家1：释放钩爪
+                } else if (code == KeyCode.W) {
+                    inputController.player1UseDynamite();   // 玩家1：引爆炸药（炸毁钩上物品）
                 } else if (code == KeyCode.A) {
-                    inputController.player1UseBomb();       // 玩家1：使用炸药
+                    inputController.player1UsePowerPotion();// 玩家1：强力药水（收回×2/10秒）
+                } else if (code == KeyCode.D) {
+                    inputController.player1UseFreezeBox();  // 玩家1：冰冻箱（冻结对方3秒）
                 } else if (code == KeyCode.DOWN) {
                     inputController.player2ReleaseHook();   // 玩家2：释放钩爪
-                } else if (code == KeyCode.L) {
-                    inputController.player2UseBomb();       // 玩家2：使用炸药
+                } else if (code == KeyCode.UP) {
+                    inputController.player2UseDynamite();   // 玩家2：引爆炸药（炸毁钩上物品）
+                } else if (code == KeyCode.NUMPAD1 || code == KeyCode.DIGIT1) {
+                    inputController.player2UsePowerPotion();// 玩家2：强力药水
+                } else if (code == KeyCode.NUMPAD2 || code == KeyCode.DIGIT2) {
+                    inputController.player2UseFreezeBox();  // 玩家2：冰冻箱
                 } else if (code == KeyCode.ESCAPE) {
                     inputController.togglePause();
                     // 按切换后的最新状态显示/隐藏「已暂停」遮罩
@@ -121,6 +129,7 @@ public class Main extends Application {
                         pauseView.hide();
                     }
                 }
+                // 其余按键预留（F/G/H、Num3~Num5）
             });
         }
 
@@ -145,16 +154,27 @@ public class Main extends Application {
         };
         physicsTimer.start();
 
-        // 倒计时控制器：每秒递减 1，归零结束对局（FR-30）
+        // 倒计时控制器：每秒递减 1，归零结束对局（FR-10）
         // 注意：GameTimerImpl 的 tick 在后台线程执行，所有 UI 操作必须用
         // Platform.runLater 切回 JavaFX Application Thread（分层约束：controller 不依赖 javafx）
         GameTimer timer = new GameTimerImpl(model);
-        timer.setOnTick(() -> Platform.runLater(() -> hudView.render(model)));
-        timer.setOnTimeUp(() -> Platform.runLater(() -> {
+        // 结束流程幂等保护：倒计时归零(FR-10)与物品清空(FR-08)可能竞争，只允许进入一次结算
+        final boolean[] ended = {false};
+        Runnable enterResult = () -> {
+            if (ended[0]) return;
+            ended[0] = true;
             physicsTimer.stop(); // 停止钩子物理驱动
             showResultFlow(root, gamePane, model);
-        }));
+        };
+        timer.setOnTick(() -> Platform.runLater(() -> hudView.render(model)));
+        timer.setOnTimeUp(() -> Platform.runLater(enterResult));
         timer.start();
+
+        // FR-08 自动结束：场上物品清空且双钩均回 SWINGING 时模型立即回调（在 FX 线程触发，可直接操作 UI）
+        model.setOnGameEnd(() -> {
+            timer.stop();
+            enterResult.run();
+        });
 
         root.getChildren().add(gamePane);
     }

@@ -51,20 +51,31 @@ public interface GameModel {
     void shutdown();
 
     /**
-     * 胜负判定（FR-31）：比较双方最终分数。
-     * 业务规则下沉到 Model 层，View 层仅负责文案与颜色渲染。
+     * 从场景移除物品（玩家按炸药键炸毁钩上携带物时调用）。
+     *
+     * @param item 被炸毁的物品
+     */
+    void removeItem(Item item);
+
+    /**
+     * 胜负判定（FR-09 0分判负规则）：
+     * 一方 0 分另一方为正，则 0 分方判负；双方均为 0 判定平局；其余情况高分者获胜。
      *
      * @return 正数=玩家1获胜，负数=玩家2获胜，0=平局
      */
     default int determineWinner() {
-        return Integer.compare(getPlayer1().getScore(), getPlayer2().getScore());
+        int s1 = getPlayer1().getScore();
+        int s2 = getPlayer2().getScore();
+        if (s1 == 0 && s2 == 0) return 0; // 双方均 0：平局
+        if (s1 == 0 && s2 > 0) return -1; // P1 0 分、P2 为正：P1 判负
+        if (s2 == 0 && s1 > 0) return 1;  // P2 0 分、P1 为正：P2 判负
+        return Integer.compare(s1, s2);   // 其余：高分者胜（负分低于 0 自然判负）
     }
 
     /**
-     * 玩家使用炸药触发爆炸效果（由 InputController 调用）。
-     * 若该玩家钩爪正携带物品，则炸掉物品使钩爪空钩快速收回。
-     *
-     * @param playerId 使用炸药的玩家编号（1 或 2）
+     * FR-08 注册对局提前结束回调：
+     * 场上所有可抓取物品被清空，且双方钩爪均处于 SWINGING 时立即触发，
+     * 装配层（Main）在回调里停止倒计时与物理帧并进入结算流程。
      */
-    void triggerExplosion(int playerId);
+    void setOnGameEnd(Runnable action);
 }

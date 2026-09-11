@@ -165,7 +165,8 @@ public class GameModelImpl implements GameModel {
         }, 2, TimeUnit.SECONDS); // 2 秒（游戏时间）后自动收回
     }
 
-    /** 释放后台资源：终止钩爪收回定时线程池（FR-18）。
+    /**
+     * 释放后台资源：终止钩爪收回定时线程池（FR-18）。
      * 对局结束/进入结算前由装配层（Main）调用，防止反复开局累积线程；
      * 调用后本实例不再调度新的收回任务，挂起中的任务被中断放弃。
      */
@@ -175,16 +176,21 @@ public class GameModelImpl implements GameModel {
     }
 
     /**
-     * 玩家使用炸药触发爆炸效果（GameModelImpl 版）。
-     * 若钩爪正携带物品则炸掉物品使钩爪空钩收回。
+     * 从场景移除物品（玩家按炸药键炸毁钩上携带物时调用）。
+     * 注意：本类已被融合版 GameManagerImpl 取代，仅保留接口实现以维持编译。
      */
     @Override
-    public void triggerExplosion(int playerId) {
-        Hook hook = playerId == 1 ? hook1 : hook2;
-        Item grabbed = hook.getGrabbedItem();
-        if (grabbed != null) {
-            sceneItems.remove(grabbed);
-            hook.retractHook();
+    public void removeItem(Item item) {
+        if (item != null) {
+            sceneItems.remove(item);
         }
+    }
+
+    /**
+     * FR-08 自动结束回调：本类已被 GameManagerImpl 取代，仅空实现以维持接口编译。
+     */
+    @Override
+    public void setOnGameEnd(Runnable action) {
+        // no-op：GameManagerImpl 才是 Main.java 实际装配的模型
     }
 }

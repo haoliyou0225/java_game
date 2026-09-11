@@ -20,6 +20,13 @@
             <artifactId>javafx-controls</artifactId>
             <version>17.0.13</version>
         </dependency>
+        <!-- JUnit 5 验收测试（FR-01 公平性 / FR-07 状态机 / FR-14~18 道具结算 / 资源释放） -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -29,6 +36,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
+            </plugin>
+            <!-- 测试运行插件（JUnit 5 Platform） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
             <!-- JavaFX 运行插件：mvn javafx:run 一键启动 -->
             <plugin>

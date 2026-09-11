@@ -1,17 +1,19 @@
-// FR-UI InputControllerImpl：双人输入实现（状态校验→置 THROWING→模拟收回，暂停切换，炸药使用），来自 feature_ui 分支
+// FR-UI InputControllerImpl：双人输入实现（状态校验→置 THROWING→模拟收回，暂停切换），来自 feature_ui 分支
 package Main.controller;
 
+import Main.config.GameConfig;
 import Main.model.GameModel;
 import Main.model.GameState;
 import Main.model.Hook;
 import Main.model.HookState;
 import Main.model.Item;
+import Main.model.Player;
 import Main.util.LogUtils;
 
 /**
  * FR-18 双人按键独立监听 —— 控制器实现。
  * <p>
- * 职责：接收 View 层转发的按键事件，校验对局状态后驱动对应玩家的钩爪或道具。
+ * 职责：接收 View 层转发的按键事件，校验对局状态后驱动对应玩家的钩爪。
  * 两名玩家的处理逻辑完全独立（各自走独立分支），互不阻塞、互不干扰。
  * <p>
  * 分层约束：本类位于 controller 包，不导入任何 javafx.* 类；
@@ -53,47 +55,113 @@ public class InputControllerImpl implements InputController {
     }
 
     /**
-     * 玩家1使用炸药（按键 A）。
-     * 消耗库存 → 若钩爪携带物品则炸掉 → 钩爪变空钩收回。
+     * 玩家1引爆炸药（按键 W）：PLAYING + GRABBING + 有库存时，
+     * 炸毁钩上携带物（从场景移除）、钩爪立即空钩收回、库存减 1。
      */
     @Override
-    public void player1UseBomb() {
-        useBomb(1, model.getHook1(), model.getPlayer1(), "玩家1");
+    public void player1UseDynamite() {
+        useDynamite(model.getHook1(), model.getPlayer1(), "玩家1");
     }
 
     /**
-     * 玩家2使用炸药（按键 L）。
-     * 与玩家1逻辑完全对称且独立。
+     * 玩家2引爆炸药（按键 ↑），与玩家1完全对称。
      */
     @Override
-    public void player2UseBomb() {
-        useBomb(2, model.getHook2(), model.getPlayer2(), "玩家2");
+    public void player2UseDynamite() {
+        useDynamite(model.getHook2(), model.getPlayer2(), "玩家2");
+    }
+
+    /** 玩家1强力药水（按键 A，FR-16）：消耗库存，自身钩爪收回×2 持续 10 秒 */
+    @Override
+    public void player1UsePowerPotion() {
+        usePowerPotion(model.getHook1(), model.getPlayer1(), "玩家1");
+    }
+
+    /** 玩家2强力药水（按键 Num1），与玩家1完全对称 */
+    @Override
+    public void player2UsePowerPotion() {
+        usePowerPotion(model.getHook2(), model.getPlayer2(), "玩家2");
+    }
+
+    /** 玩家1冰冻箱（按键 D，FR-15）：仅对玩家2钩爪生效，冻结 3 秒 */
+    @Override
+    public void player1UseFreezeBox() {
+        useFreezeBox(model.getHook2(), model.getPlayer1(), "玩家1");
+    }
+
+    /** 玩家2冰冻箱（按键 Num2）：仅对玩家1钩爪生效 */
+    @Override
+    public void player2UseFreezeBox() {
+        useFreezeBox(model.getHook1(), model.getPlayer2(), "玩家2");
     }
 
     /**
-     * 使用炸药的公共流程：状态校验 → 库存扣减 → 炸掉携带物品 → 钩爪空钩收回。
-     *
-     * @param playerId    玩家编号（1 或 2）
-     * @param hook        目标钩爪
-     * @param player      玩家实例（用于扣减炸药库存）
-     * @param playerLabel 玩家标签（日志用）
+     * 强力药水公共流程（FR-16/FR-18）：
+     * 对局中 + 库存 > 0 → 库存减 1，钩爪收回速度 ×2 持续 POWER_POTION_DURATION_SEC 秒；
+     * 已生效时再次使用仅刷新剩余时长（倍率不叠加，由 HookImpl 保证）。
      */
-    private void useBomb(int playerId, Hook hook, Main.model.Player player, String playerLabel) {
-        // 非对局中忽略
+    private void usePowerPotion(Hook hook, Player player, String playerLabel) {
         if (model.getState() != GameState.PLAYING) {
             return;
         }
-        if (hook == null || player == null) {
+        if (hook == null) {
             return;
         }
-        // 库存不足
-        if (!player.useBomb()) {
-            System.out.println(LogUtils.format(playerLabel + " 炸药不足"));
+        if (!player.consumePowerPotion()) {
+            System.out.println(LogUtils.format(playerLabel + " 强力药水库存不足"));
             return;
         }
-        // 触发爆炸效果：若钩爪正携带物品则清除
-        model.triggerExplosion(playerId);
-        System.out.println(LogUtils.format(playerLabel + " 使用炸药！剩余 " + player.getBombCount() + " 个"));
+        hook.applySpeedBoost(GameConfig.POWER_POTION_DURATION_SEC);
+        System.out.println(LogUtils.format(playerLabel + " 使用强力药水，收回速度×2 持续 10 秒，剩余库存: "
+                + player.getPowerPotionCount()));
+    }
+
+    /**
+     * 冰冻箱公共流程（FR-15/FR-16）：
+     * 对局中 + 库存 > 0 → 库存减 1，对方钩爪进入 FROZEN 冻结 HOOK_FREEZE_DURATION_SEC 秒。
+     * 冰冻箱只能作用于对方钩爪（调用方传入的即对钩）。
+     */
+    private void useFreezeBox(Hook opponentHook, Player player, String playerLabel) {
+        if (model.getState() != GameState.PLAYING) {
+            return;
+        }
+        if (opponentHook == null) {
+            return;
+        }
+        if (!player.consumeFreezeBox()) {
+            System.out.println(LogUtils.format(playerLabel + " 冰冻箱库存不足"));
+            return;
+        }
+        opponentHook.freeze(GameConfig.HOOK_FREEZE_DURATION_SEC);
+        System.out.println(LogUtils.format(playerLabel + " 使用冰冻箱，对方钩爪冻结 3 秒，剩余库存: "
+                + player.getFreezeBoxCount()));
+    }
+
+    /**
+     * 引爆炸药公共流程（规格 FR 炸药键）。
+     * 条件链：对局中 → 钩爪正在携带物品（GRABBING）→ 炸药库存 > 0；
+     * 满足后：hook.detachCarriedItem() 让钩爪立即空钩收回并返回携带物，
+     * 玩家库存减 1，物品从场景移除（不计分）。
+     */
+    private void useDynamite(Hook hook, Player player, String playerLabel) {
+        if (model.getState() != GameState.PLAYING) {
+            return;
+        }
+        if (hook == null || hook.getState() != HookState.GRABBING) {
+            return;
+        }
+        if (player.getDynamiteCount() <= 0) {
+            System.out.println(LogUtils.format(playerLabel + " 炸药库存不足"));
+            return;
+        }
+        Item carried = hook.detachCarriedItem();
+        if (carried == null) {
+            return;
+        }
+        player.useDynamite();
+        model.removeItem(carried);
+        System.out.println(LogUtils.format(playerLabel + " 引爆炸药，炸毁物品，剩余炸药: "
+                + player.getDynamiteCount()));
     }
 
     /**

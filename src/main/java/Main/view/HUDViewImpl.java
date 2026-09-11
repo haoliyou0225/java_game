@@ -23,6 +23,12 @@ public class HUDViewImpl implements HUDView {
     /** 玩家2分数标签 */
     private final Label p2ScoreLabel;
 
+    /** 玩家1道具/效果标签（FR-22：炸药、短时道具库存、持续道具激活状态） */
+    private final Label p1ItemLabel;
+
+    /** 玩家2道具/效果标签 */
+    private final Label p2ItemLabel;
+
     /** 倒计时数字标签 */
     private final Label timeLabel;
 
@@ -41,7 +47,10 @@ public class HUDViewImpl implements HUDView {
         p1ScoreLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; "
                 + "-fx-text-fill: #5db0ff;");
 
-        VBox p1Box = new VBox(0, p1Title, p1ScoreLabel);
+        p1ItemLabel = new Label("");
+        p1ItemLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #9fd0ff;");
+
+        VBox p1Box = new VBox(0, p1Title, p1ScoreLabel, p1ItemLabel);
         p1Box.setAlignment(Pos.CENTER_LEFT);
         p1Box.setPrefWidth(Config.WIDTH / 3.0);
         p1Box.setPadding(new Insets(0, 0, 0, 48));
@@ -66,7 +75,10 @@ public class HUDViewImpl implements HUDView {
         p2ScoreLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; "
                 + "-fx-text-fill: #ff6b6b;");
 
-        VBox p2Box = new VBox(0, p2Title, p2ScoreLabel);
+        p2ItemLabel = new Label("");
+        p2ItemLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #ffb3b3;");
+
+        VBox p2Box = new VBox(0, p2Title, p2ScoreLabel, p2ItemLabel);
         p2Box.setAlignment(Pos.CENTER_RIGHT);
         p2Box.setPrefWidth(Config.WIDTH / 3.0);
         p2Box.setPadding(new Insets(0, 48, 0, 0));
@@ -96,5 +108,34 @@ public class HUDViewImpl implements HUDView {
 
         // 玩家2分数（FR-29：独立显示，不混淆）
         p2ScoreLabel.setText("P2: $" + model.getPlayer2().getScore());
+
+        // FR-22：双方独立显示 炸药数 / 短时道具库存 / 钩爪增益剩余 / 持续道具激活状态
+        p1ItemLabel.setText(buildItemText(model.getPlayer1(), model.getHook1()));
+        p2ItemLabel.setText(buildItemText(model.getPlayer2(), model.getHook2()));
+    }
+
+    /**
+     * 拼装单玩家道具状态行（FR-22）：
+     * 冰冻中优先提示；随后 炸药/药水（生效中带剩余秒）/冰箱库存；最后已激活持续道具。
+     */
+    private String buildItemText(Main.model.Player player, Main.model.Hook hook) {
+        StringBuilder sb = new StringBuilder();
+        if (hook != null && hook.isFrozen()) {
+            sb.append("冰冻中").append((int) Math.ceil(hook.getFreezeRemaining())).append("s  ");
+        }
+        sb.append("炸药x").append(player.getDynamiteCount());
+        sb.append("  药水x").append(player.getPowerPotionCount());
+        if (hook != null && hook.isSpeedBoostActive()) {
+            sb.append("(").append((int) Math.ceil(hook.getSpeedBoostRemaining())).append("s)");
+        }
+        sb.append("  冰箱x").append(player.getFreezeBoxCount());
+        StringBuilder persist = new StringBuilder();
+        if (player.hasLuckyClover()) persist.append(" 四叶");
+        if (player.hasDiamondBoost()) persist.append(" 钻药");
+        if (player.hasStoneBook()) persist.append(" 石书");
+        if (persist.length() > 0) {
+            sb.append(" |").append(persist);
+        }
+        return sb.toString();
     }
 }
