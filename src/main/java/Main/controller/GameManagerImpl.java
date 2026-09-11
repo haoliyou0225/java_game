@@ -1,10 +1,11 @@
-// FR-16 游戏管理器实现：每帧调度 gameLoopTick(deltaTime)、输入分发 dispatchAction、胜负判定 judgeGameOver，组装 Hook/Rope/GameData/Level
-// 融合版：同时实现 GameModel 接口，替代 GameModelImpl 成为 Main.java 的唯一模型装配点
+// FR-16 游戏管理器实现：每帧调度 gameLoopTick(deltaTime)、语义动作处理 handleAction、胜负判定，组装 Hook/Rope/GameData/Level
+// 融合版：同时实现 GameModel 与 GameActionHandler 接口，替代 GameModelImpl 成为 Main.java 的唯一模型装配点
 package Main.controller;
 
 import Main.config.Config;
 import Main.config.GameConfig;
 import Main.model.*;
+import Main.util.LogUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,11 +16,13 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 游戏管理器实现（严格对齐 UML）+ GameModel 接口（融合版）
- * 每帧调度 Hook/Item 更新，处理碰撞、计分、胜负判定
- * 同时作为 UI 层 GameModel 接口的唯一实现，Main.java 直接 new 本类
+ * 游戏管理器实现（严格对齐 UML）+ GameModel / GameActionHandler 接口（融合版）
+ * 每帧调度 Hook/Item 更新，处理碰撞、计分、胜负判定；
+ * 同时是所有语义动作（抛钩/炸药/道具/暂停）的权威处理层：状态校验、物理推进、
+ * 库存扣减、道具效果全部集中在本类，输入控制器只负责防抖与派发。
+ * 本类不依赖任何 JavaFX 类型，可脱离界面在 headless main() 中跑完一整局。
  */
-public class GameManagerImpl implements GameManager, GameModel, AutoCloseable {
+public class GameManagerImpl implements GameManager, GameModel, GameActionHandler, AutoCloseable {
 
     // ===== GameManager 原版字段 =====
     private Hook hookP1;
@@ -185,17 +188,131 @@ public class GameManagerImpl implements GameManager, GameModel, AutoCloseable {
         }
     }
 
-    /** 分发输入动作 */
+    /**
+     * 语义动作权威处理（FR-18，View→Controller→本方法）。
+     * 唯一入口：先做对局状态门控（暂停除外），再按动作类型分发到具体私有流程；
+     * 钩爪/库存的二级门控（SWINGING/GRABBING/库存>0）在各流程内完成，门控不通过即静默忽略。
+     *
+     * @param playerId 1=P1，2=P2；TOGGLE_PAUSE 传 0
+     * @param action   语义动作
+     */
     @Override
-    public void dispatchAction(InputAction action) {
-        if (action == null) return;
-        // 融合：同时检查 GameManager 和 GameState
-        if (gameData.getStage() != GameStage.PLAYING) return;
-        if (state != GameState.PLAYING) return;
-        if (action.getType().equals(InputAction.THROW_P1)) {
-            hookP1.throwHook();
-        } else if (action.getType().equals(InputAction.THROW_P2)) {
-            hookP2.throwHook();
+    public void handleAction(int playerId, ActionType action) {
+        if (action == null) {
+            return;
+        }
+        // 暂停切换是唯一允许在 PAUSED 下处理的动作
+        if (action == ActionType.TOGGLE_PAUSE) {
+            togglePause();
+            return;
+        }
+        if (state != GameState.PLAYING || gameData.getStage() != GameStage.PLAYING) {
+            return;
+        }
+        Hook selfHook = playerId == 1 ? hookP1 : playerId == 2 ? hookP2 : null;
+        Hook opponentHook = playerId == 1 ? hookP2 : playerId == 2 ? hookP1 : null;
+        Player self = playerId == 1 ? player1 : playerId == 2 ? player2 : null;
+        if (selfHook == null || self == null) {
+            return;
+        }
+        String label = "玩家" + playerId;
+
+        switch (action) {
+            case THROW_HOOK -> releaseHook(selfHook, label);
+            case USE_DYNAMITE -> useDynamite(selfHook, self, label);
+            case USE_POWER_POTION -> usePowerPotion(selfHook, self, label);
+            case USE_FREEZE_BOX -> useFreezeBox(opponentHook, self, label);
+            case USE_LUCKY_CLOVER -> usePersistItem(self.useLuckyClover(), "幸运草", self, label);
+            case USE_DIAMOND_BOOST -> usePersistItem(self.useDiamondBoost(), "钻石升级", self, label);
+            case USE_STONE_BOOK -> usePersistItem(self.useStoneBook(), "石头书", self, label);
+            default -> { /* 未知动作忽略 */ }
+        }
+    }
+
+    /**
+     * 释放钩爪（FR-11）：仅 SWINGING 可触发（hook.throwHook 内部门控），
+     * 触发后以 HOOK_THROW_SPEED（500px/s）沿当前摆角直线抛出。
+     */
+    private void releaseHook(Hook hook, String playerLabel) {
+        HookState before = hook.getState();
+        hook.throwHook();
+        if (hook.getState() == HookState.THROWING && before == HookState.SWINGING) {
+            System.out.println(LogUtils.format(playerLabel + " 释放钩爪，角度: "
+                    + String.format("%.1f°", Math.toDegrees(hook.getAngle()))));
+        }
+    }
+
+    /**
+     * 引爆炸药（FR-15）：门控链 = PLAYING → 钩爪 GRABBING（携带物品收回中）→ 炸药库存>0。
+     * 炸毁携带物（不计分、移出场景），钩爪立即空钩收回，库存 -1。
+     */
+    private void useDynamite(Hook hook, Player player, String playerLabel) {
+        if (hook.getState() != HookState.GRABBING) {
+            return; // SWINGING/THROWING/空钩收回等状态按键无效，不耗库存
+        }
+        if (player.getDynamiteCount() <= 0) {
+            return;
+        }
+        Item carried = hook.detachCarriedItem();
+        if (carried == null) {
+            return;
+        }
+        player.useDynamite();
+        removeItem(carried);
+        System.out.println(LogUtils.format(playerLabel + " 引爆炸药，炸毁物品，剩余炸药: "
+                + player.getDynamiteCount()));
+    }
+
+    /**
+     * 强力药水（FR-16）：库存 >0 时扣 1，自身钩爪收回速度 ×2 持续 10 秒；
+     * 生效中再次使用仅刷新剩余时长（倍率不叠加，由 HookImpl 保证）。
+     */
+    private void usePowerPotion(Hook hook, Player player, String playerLabel) {
+        if (!player.consumePowerPotion()) {
+            return;
+        }
+        hook.applySpeedBoost(GameConfig.POWER_POTION_DURATION_SEC);
+        System.out.println(LogUtils.format(playerLabel + " 使用强力药水，收回速度×2 持续 10 秒，剩余库存: "
+                + player.getPowerPotionCount()));
+    }
+
+    /**
+     * 冰冻箱（FR-15/FR-16）：库存 >0 时扣 1，对方钩爪 FROZEN 冻结 3 秒（运动完全暂停）。
+     */
+    private void useFreezeBox(Hook opponentHook, Player player, String playerLabel) {
+        if (opponentHook == null || !player.consumeFreezeBox()) {
+            return;
+        }
+        opponentHook.freeze(GameConfig.HOOK_FREEZE_DURATION_SEC);
+        System.out.println(LogUtils.format(playerLabel + " 使用冰冻箱，对方钩爪冻结 3 秒，剩余库存: "
+                + player.getFreezeBoxCount()));
+    }
+
+    /**
+     * 持续道具按键使用（FR-18，幸运草/钻石升级/石头书）：
+     * Player 已完成库存扣减与结果判定，本方法只负责日志反馈。
+     * ACTIVATED=首次激活；DUPLICATE_GOLD=已激活折 50 金币；NO_STOCK=库存 0（按键无效）。
+     */
+    private void usePersistItem(PersistItemUseResult result, String itemName, Player player, String playerLabel) {
+        switch (result) {
+            case ACTIVATED -> System.out.println(LogUtils.format(playerLabel + " 使用" + itemName + "，本局效果已激活"));
+            case DUPLICATE_GOLD -> System.out.println(LogUtils.format(playerLabel + " " + itemName
+                    + "已激活，自动折算 +" + GameConfig.ITEM_DUP_AUTO_GOLD + " 金币，当前分数: " + player.getScore()));
+            case NO_STOCK -> { /* 库存为 0，按键无效 */ }
+        }
+    }
+
+    /**
+     * 暂停/恢复（ESC，双方共用）：PLAYING↔PAUSED 互切，READY/FINISHED 忽略。
+     * 双人同帧按 ESC 由 InputController 的 justPressed 防抖保证只派发一次。
+     */
+    private void togglePause() {
+        if (state == GameState.PLAYING) {
+            setState(GameState.PAUSED);
+            System.out.println(LogUtils.format("游戏暂停"));
+        } else if (state == GameState.PAUSED) {
+            setState(GameState.PLAYING);
+            System.out.println(LogUtils.format("游戏继续"));
         }
     }
 
@@ -341,11 +458,12 @@ public class GameManagerImpl implements GameManager, GameModel, AutoCloseable {
             case FREEZE_BOX:
                 return player.addFreezeBox(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
             case LUCKY_CLOVER:
-                return player.grantLuckyClover() ? 0 : GameConfig.ITEM_DUP_AUTO_GOLD;
+                // FR-18：持续道具先入库存，玩家按 F/Num3 消耗激活（库存满则折 50 金币）
+                return player.addLuckyClover(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
             case DIAMOND_BOOST:
-                return player.grantDiamondBoost() ? 0 : GameConfig.ITEM_DUP_AUTO_GOLD;
+                return player.addDiamondBoost(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
             case STONE_BOOK:
-                return player.grantStoneBook() ? 0 : GameConfig.ITEM_DUP_AUTO_GOLD;
+                return player.addStoneBook(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
             default:
                 return 0;
         }

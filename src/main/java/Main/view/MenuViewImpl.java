@@ -1,4 +1,4 @@
-// FR-UI MenuViewImpl：主菜单实现（GoldMainer 标题 + 开始对战/退出按钮），来自 feature_ui 分支
+// FR-UI MenuViewImpl：主菜单实现（GoldMainer 标题 + 开始对战/新手指南/退出按钮），来自 feature_ui 分支
 package Main.view;
 
 import Main.config.Config;
@@ -12,7 +12,12 @@ import javafx.scene.layout.VBox;
 
 /**
  * 主菜单视图实现（FR-32）
- * 布局：居中显示标题 GoldMainer、副标题，以及"开始对战"、"退出游戏"两个按钮。
+ * 布局：居中显示标题 GoldMainer、副标题，以及
+ * “开始对战”、“新手指南”、“退出游戏”三个按钮。
+ * <p>
+ * 说明：完整的双人键位表与游戏规则已抽取到可复用组件 {@link ControlGuidePane}，
+ * 由“新手指南”按钮回调上层弹出独立窗口展示（FR-26），主菜单不再内联整份提示，
+ * 以保证 1280×720 逻辑分辨率下排版整齐、不被裁切。
  */
 public class MenuViewImpl implements MenuView {
 
@@ -22,11 +27,17 @@ public class MenuViewImpl implements MenuView {
     /** 开始对战按钮 */
     private final Button startButton;
 
+    /** 新手指南按钮（点击后由上层弹出独立指南窗口） */
+    private final Button guideButton;
+
     /** 退出游戏按钮 */
     private final Button exitButton;
 
     /** 由上层注入的开局流程回调 */
     private Runnable onStartGame;
+
+    /** 由上层注入的打开新手指南窗口回调 */
+    private Runnable onOpenGuide;
 
     /** 由上层注入的退出游戏回调 */
     private Runnable onExit;
@@ -49,6 +60,14 @@ public class MenuViewImpl implements MenuView {
             }
         });
 
+        // 新手指南按钮：点击后由上层弹出独立的操作指南窗口
+        guideButton = UiStyle.createGoldButton("新手指南");
+        guideButton.setOnAction(e -> {
+            if (onOpenGuide != null) {
+                onOpenGuide.run();
+            }
+        });
+
         // 退出游戏按钮
         exitButton = UiStyle.createGoldButton("退出游戏");
         exitButton.setOnAction(e -> {
@@ -57,8 +76,8 @@ public class MenuViewImpl implements MenuView {
             }
         });
 
-        // 垂直布局：标题 / 副标题 / 开始对战 / 退出游戏
-        menuBox = new VBox(20, titleLabel, subtitleLabel, startButton, exitButton);
+        // 垂直布局：标题 / 副标题 / 开始对战 / 新手指南 / 退出游戏
+        menuBox = new VBox(20, titleLabel, subtitleLabel, startButton, guideButton, exitButton);
         menuBox.setAlignment(Pos.CENTER);
         menuBox.setPadding(new Insets(40));
         menuBox.setPrefSize(Config.WIDTH, Config.HEIGHT);
@@ -84,6 +103,11 @@ public class MenuViewImpl implements MenuView {
     @Override
     public void setOnStartGame(Runnable action) {
         this.onStartGame = action;
+    }
+
+    @Override
+    public void setOnOpenGuide(Runnable action) {
+        this.onOpenGuide = action;
     }
 
     @Override

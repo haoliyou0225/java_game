@@ -4,6 +4,8 @@ package Main.model;
 import Main.config.GameConfig;
 import Main.util.CollisionUtil;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -35,6 +37,13 @@ public class HookImpl implements Hook {
     private int playerId;
     private int swingDir = 1;  // 摆动方向
     private Item grabbedItem;  // 当前携带的物品
+
+    /**
+     * 绳路折点（按锚点向外顺序）。鼹鼠碰撞偏转时在碰撞瞬间的钩尖处记录一个折点，
+     * 绳索呈 锚点→折点₁→…→折点ₙ→钩尖 的折线；ropeLength 始终表示沿该折线的
+     * 累计路径长度。收回时沿折线原路折返，钩尖退过某折点即将其逆序移除。
+     */
+    private final List<double[]> bendPoints = new ArrayList<>();
 
     // ===== 眩晕 / 抢夺 / 档位相关状态 =====
     /** 眩晕剩余秒数 */
@@ -94,16 +103,15 @@ public class HookImpl implements Hook {
     public void throwHook() {
         if (state != HookState.SWINGING) return;
         grabbedItem = null;
+        bendPoints.clear(); // 新一次抛出绳路为直绳
         state = HookState.THROWING;
     }
 
     /** 紧急收回（空钩） */
     @Override
     public void retractHook() {
-        if (state == HookState.THROWING || state == HookState.RETRACTING || state == HookState.GRABBING) {
+        if (state == HookState.THROWING || state == HookState.RETRACTING) {
             state = HookState.RETRACTING;
-            // 炸药炸掉物品时：清除携带引用，让钩爪真正空钩收回
-            grabbedItem = null;
         }
     }
 
@@ -159,19 +167,25 @@ public class HookImpl implements Hook {
             case GRABBING:
                 // 收回速度 = 抓取瞬间绳长 / 物品收回耗时（全程匀速，强力药水生效 ×2）
                 ropeLength -= carriedRetractSpeed() * deltaTime;
-                dragItem();
-                if (ropeLength <= SWING_LENGTH) {
-                    ropeLength = SWING_LENGTH;
-                    state = HookState.SWINGING;
-                }
+                boolean arrivedGrab = ropeLength <= SWING_LENGTH;
+                if (arrivedGrab) ropeLength = SWING_LENGTH;
+                // 沿鼹鼠碰撞形成的折线路径逐段原路折返，退过折点即消折
+                consumePassedBends();
+                if (arrivedGrab) bendPoints.clear();
+                dragItem(); // 绳长夹紧后再定位物品，保证最后一帧精确停在钟摆起点
+                if (arrivedGrab) state = HookState.SWINGING;
                 break;
             case RETRACTING:
                 // 空钩固定 800px/s（强力药水生效 ×2）
                 double emptySpeed = GameConfig.HOOK_EMPTY_RETRACT_SPEED
                         * (speedBoostTimer > 0 ? GameConfig.HOOK_SPEED_BOOST_MULTIPLIER : 1.0);
                 ropeLength -= emptySpeed * deltaTime;
-                if (ropeLength <= SWING_LENGTH) {
-                    ropeLength = SWING_LENGTH;
+                boolean arrivedEmpty = ropeLength <= SWING_LENGTH;
+                if (arrivedEmpty) ropeLength = SWING_LENGTH;
+                // 沿折线路径原路折返，退过折点即消折、方向恢复原段
+                consumePassedBends();
+                if (arrivedEmpty) {
+                    bendPoints.clear();
                     state = HookState.SWINGING;
                 }
                 break;
@@ -209,6 +223,10 @@ public class HookImpl implements Hook {
                 double deg = GameConfig.MOLE_DEFLECT_MIN_DEG
                         + Math.random() * (GameConfig.MOLE_DEFLECT_MAX_DEG - GameConfig.MOLE_DEFLECT_MIN_DEG);
                 double sign = ThreadLocalRandom.current().nextBoolean() ? 1 : -1;
+                // 绳子在碰撞点打折：先记录偏转前钩尖为折点（锚点→折点段保留原方向），
+                // 再让折点之后的钩爪段偏转飞行；收回时沿折线原路折返
+                double[] bendTip = hookTip();
+                bendPoints.add(new double[]{bendTip[0], bendTip[1]});
                 angle += sign * Math.toRadians(deg);
                 lastInteractMob = item;
                 lastInteractNano = nowNano;
@@ -295,14 +313,69 @@ public class HookImpl implements Hook {
                 || tip[1] >= GameConfig.MINE_MAX_Y;
     }
 
-    /** 钩尖坐标 */
+    /**
+     * 钩尖坐标：沿绳路折线行走。
+     * 从锚点起依次经过各折点（每段长度取折点间实际距离），
+     * 最后一段（最末折点→钩尖）沿当前 angle 方向；无折点时等价于直绳。
+     */
     private double[] hookTip() {
-        double anchorX = playerId == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2;
-        double anchorY = GameConfig.HOOK_ANCHOR_Y;
+        double[] anchor = anchorPoint();
+        double px = anchor[0];
+        double py = anchor[1];
+        double remaining = ropeLength;
+        for (double[] bend : bendPoints) {
+            double segLen = Math.hypot(bend[0] - px, bend[1] - py);
+            if (remaining <= segLen) {
+                // 钩尖落在本段（上一顶点 → 该折点）上：收回折返经过这里
+                double k = segLen == 0 ? 0 : remaining / segLen;
+                return new double[]{px + (bend[0] - px) * k, py + (bend[1] - py) * k};
+            }
+            remaining -= segLen;
+            px = bend[0];
+            py = bend[1];
+        }
+        // 最后一段沿当前飞行方向（鼹鼠偏转后即偏转方向）
         return new double[]{
-                anchorX + Math.cos(angle) * ropeLength,
-                anchorY + Math.sin(angle) * ropeLength
+                px + Math.cos(angle) * remaining,
+                py + Math.sin(angle) * remaining
         };
+    }
+
+    /** 锚点坐标 */
+    private double[] anchorPoint() {
+        return new double[]{
+                playerId == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2,
+                GameConfig.HOOK_ANCHOR_Y
+        };
+    }
+
+    /**
+     * 收回时按原路折返：钩尖沿折线逐段退回，一旦退过某折点，
+     * 移除该折点及其后所有折点，并把当前段方向恢复为该折点与上一顶点
+     * （锚点或前一折点）的连线方向，保证绳索严格沿抛出路径退回锚点。
+     */
+    private void consumePassedBends() {
+        double[] anchor = anchorPoint();
+        double px = anchor[0];
+        double py = anchor[1];
+        double accumulated = 0;
+        int keep = bendPoints.size();
+        for (int i = 0; i < bendPoints.size(); i++) {
+            double[] bend = bendPoints.get(i);
+            double segLen = Math.hypot(bend[0] - px, bend[1] - py);
+            if (ropeLength <= accumulated + segLen) {
+                // 钩尖已退回折点 i 之前：消折 i 及其后折点，退回方向取本段原方向
+                angle = Math.atan2(bend[1] - py, bend[0] - px);
+                keep = i;
+                break;
+            }
+            accumulated += segLen;
+            px = bend[0];
+            py = bend[1];
+        }
+        while (bendPoints.size() > keep) {
+            bendPoints.remove(bendPoints.size() - 1);
+        }
     }
 
     /** 进入眩晕：碰撞点冻结2秒，松开携带物品（归属/原位由 GameManager 处理），结束自动空钩收回 */
@@ -370,11 +443,6 @@ public class HookImpl implements Hook {
         return grabbedItem == item;
     }
 
-    @Override
-    public Item getGrabbedItem() {
-        return grabbedItem;
-    }
-
     @Override public HookState getState() { return state; }
     @Override public double getAngle() { return angle; }
     @Override public double getRopeLength() { return ropeLength; }
@@ -390,16 +458,19 @@ public class HookImpl implements Hook {
     }
     @Override public double getStartY() { return GameConfig.HOOK_ANCHOR_Y; }
 
+    /** 绳路折点只读列表（供视图绘制打折绳索，无折点时为空） */
+    @Override
+    public List<double[]> getBendPoints() {
+        return Collections.unmodifiableList(bendPoints);
+    }
+
     // ===== 抢夺/眩晕/炸药读取 =====
+    @Override public Item getGrabbedItem() { return grabbedItem; }
     @Override public long getGrabTimestampMs() { return grabTimestampMs; }
     @Override public double getGrabOriginX() { return grabOriginX; }
     @Override public double getGrabOriginY() { return grabOriginY; }
 
     // ===== 结算瞬时飘字（融合 feature/item） =====
-    @Override public String getSettleLabel() { return settleLabel; }
-    @Override public long getSettleLabelUntil() { return settleLabelUntil; }
-    @Override public Main.config.GameConfig.MysteryReward getSettleIcon() { return settleIcon; }
-
     /** 设置普通分数飘字（durationMs 毫秒后失效） */
     public void setSettleLabel(String text, long durationMs) {
         this.settleLabel = text;
@@ -413,4 +484,8 @@ public class HookImpl implements Hook {
         this.settleIcon = icon;
         this.settleLabelUntil = System.currentTimeMillis() + durationMs;
     }
+
+    @Override public String getSettleLabel() { return settleLabel; }
+    @Override public long getSettleLabelUntil() { return settleLabelUntil; }
+    @Override public Main.config.GameConfig.MysteryReward getSettleIcon() { return settleIcon; }
 }

@@ -97,6 +97,8 @@ public final class GameConfig {
     public static final int PLAYER_MAX_DYNAMITE_COUNT = 3;
     /** 短时道具（强力药水/冰冻箱）单种库存上限（FR-15：短时道具上限 5） */
     public static final int PLAYER_MAX_SHORT_ITEM_COUNT = 5;
+    /** 持续道具（幸运草/钻石升级/石头书）单种库存上限（FR-18：按键使用，单激活位） */
+    public static final int PLAYER_MAX_PERSIST_ITEM_COUNT = 5;
     /** TNT爆炸半径 单位像素（FR-12：150，不计分/不扣金币/不眩晕） */
     public static final int TNT_EXPLOSION_RADIUS = 150;
     /** 福袋必给金币下限（FR-01/FR-14：生成时预计算 100~800） */
@@ -156,7 +158,7 @@ public final class GameConfig {
 
     /**
      * 福袋额外奖励枚举（FR-14 七类）：
-     * 金币 / 炸药 / 强力药水（短时）/ 冰冻箱（短时）/ 幸运草（持续）/ 钻石药水（持续）/ 石头书（持续）。
+     * 金币 / 炸药 / 强力药水（短时）/ 冰冻箱（短时）/ 幸运草（持续）/ 钻石升级（持续）/ 石头书（持续）。
      * 同时用作结算飘字的图标类型。
      */
     public enum MysteryReward {
@@ -165,7 +167,7 @@ public final class GameConfig {
         POWER_POTION("强力药水"),      // 短时道具：自身收回×2 持续 10 秒，库存上限 5
         FREEZE_BOX("冰冻箱"),          // 短时道具：冻结对方钩爪 3 秒，库存上限 5
         LUCKY_CLOVER("幸运草"),        // 持续道具：本局物品收益 +50%，单激活位
-        DIAMOND_BOOST("钻石药水"),     // 持续道具：钻石×2，单激活位
+        DIAMOND_BOOST("钻石升级"),     // 持续道具：钻石×2，单激活位
         STONE_BOOK("石头书");          // 持续道具：石头×3，单激活位
 
         private final String cnName;

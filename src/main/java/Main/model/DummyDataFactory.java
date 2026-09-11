@@ -199,6 +199,8 @@ public final class DummyDataFactory {
         @Override public double getY() { return y; }
         @Override public double getStartX() { return startX; }
         @Override public double getStartY() { return startY; }
+        /** 假钩爪始终为直绳，无折点 */
+        @Override public List<double[]> getBendPoints() { return List.of(); }
 
         // ===== 抢夺/眩晕/炸药（假实现，空操作/默认值） =====
         @Override public Item getGrabbedItem() { return null; }

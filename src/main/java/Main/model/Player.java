@@ -1,4 +1,4 @@
-// FR-UI Player：玩家接口（分数 + 炸药/短时道具库存 + 福袋持续道具效果），对齐 FR-14/FR-15/FR-18
+// FR-UI Player：玩家接口（分数 + 炸药/短时道具/持续道具库存 + 持续道具激活效果），对齐 FR-14/FR-15/FR-18
 package Main.model;
 
 public interface Player {
@@ -51,17 +51,40 @@ public interface Player {
     /** 取出 1 个冰冻箱使用（库存 > 0 扣减并返回 true） */
     boolean consumeFreezeBox();
 
-    // ===== 持续道具效果（FR-15：单激活位，抽到即激活；FR-18 已激活再抽转 +50 金币） =====
+    // ===== 持续道具（FR-15 单激活位；FR-18 福袋入库存、按键消耗使用，已激活再用转 +50 金币） =====
 
-    /** 幸运草：本局物品基础收益 ×1.5；激活返回 true，已激活返回 false（调用方转 50 金币） */
+    /** 幸运草是否已激活：本局物品基础收益 ×1.5 */
     boolean hasLuckyClover();
-    boolean grantLuckyClover();
-
-    /** 钻石药水：本局抓取钻石价值 ×2；激活返回 true，已激活返回 false */
+    /** 钻石升级是否已激活：本局抓取钻石价值 ×2 */
     boolean hasDiamondBoost();
-    boolean grantDiamondBoost();
-
-    /** 石头书：本局抓取石头价值 ×3；激活返回 true，已激活返回 false */
+    /** 石头书是否已激活：本局抓取石头价值 ×3 */
     boolean hasStoneBook();
-    boolean grantStoneBook();
+
+    /** 幸运草库存（HUD 显示 + 按键 F/Num3 使用） */
+    int getLuckyCloverCount();
+    /** 钻石升级库存（按键 G/Num4 使用） */
+    int getDiamondBoostCount();
+    /** 石头书库存（按键 H/Num5 使用） */
+    int getStoneBookCount();
+
+    /**
+     * 幸运草入库（福袋抽到时调用）。
+     * 上限 GameConfig.PLAYER_MAX_PERSIST_ITEM_COUNT，@return 实际加入数（0=已满，调用方转 50 金币）
+     */
+    int addLuckyClover(int count);
+    /** 钻石升级入库，规则同 {@link #addLuckyClover(int)} */
+    int addDiamondBoost(int count);
+    /** 石头书入库，规则同 {@link #addLuckyClover(int)} */
+    int addStoneBook(int count);
+
+    /**
+     * 按键使用幸运草（F / Num3）：
+     * 库存 0 返回 {@link PersistItemUseResult#NO_STOCK}（不扣库存）；
+     * 否则库存 -1：未激活→激活；已激活→加 50 金币。
+     */
+    PersistItemUseResult useLuckyClover();
+    /** 按键使用钻石升级（G / Num4），语义同 {@link #useLuckyClover()} */
+    PersistItemUseResult useDiamondBoost();
+    /** 按键使用石头书（H / Num5），语义同 {@link #useLuckyClover()} */
+    PersistItemUseResult useStoneBook();
 }

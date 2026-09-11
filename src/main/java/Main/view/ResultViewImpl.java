@@ -1,4 +1,4 @@
-// FR-UI ResultViewImpl：胜负结算实现（遮罩 + 获胜文案 + 双方分数 + 重新开始），来自 feature_ui 分支
+// FR-UI ResultViewImpl：胜负结算实现（遮罩 + 获胜文案 + 双方分数 + 重新开始/返回主菜单），来自 feature_ui 分支
 package Main.view;
 
 import Main.config.Config;
@@ -7,6 +7,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 
@@ -14,7 +15,8 @@ import javafx.scene.layout.VBox;
  * 胜负结算界面实现（FR-31）
  * <p>
  * 布局：全屏半透明深色遮罩 + 居中结算卡片：
- * 标题（获胜方/平局文案）→ 玩家1分数（蓝）→ 玩家2分数（红）→ "重新开始"按钮。
+ * 标题（获胜方/平局文案）→ 玩家1分数（蓝）→ 玩家2分数（红）
+ * → “重新开始”、“返回主菜单”两个按钮（水平并排）。
  * 分数颜色与 HUD（FR-29）保持一致：P1 蓝色 / P2 红色。
  */
 public class ResultViewImpl implements ResultView {
@@ -41,6 +43,9 @@ public class ResultViewImpl implements ResultView {
     /** 由上层注入的"重新开始"回调 */
     private Runnable onRestart;
 
+    /** 由上层注入的"返回主菜单"回调 */
+    private Runnable onBackToMenu;
+
     public ResultViewImpl() {
         // 标题（初始为平局金色，show() 时按判定结果更新文案与颜色）
         titleLabel = new Label();
@@ -60,7 +65,19 @@ public class ResultViewImpl implements ResultView {
             }
         });
 
-        resultBox = new VBox(24, titleLabel, score1Label, score2Label, restartButton);
+        // 返回主菜单按钮：由上层注入资源释放与回到主菜单的完整流程
+        Button backToMenuButton = UiStyle.createGoldButton("返回主菜单");
+        backToMenuButton.setOnAction(e -> {
+            if (onBackToMenu != null) {
+                onBackToMenu.run();
+            }
+        });
+
+        // 两个结算操作按钮水平并排，间距 32
+        HBox actionBox = new HBox(32, restartButton, backToMenuButton);
+        actionBox.setAlignment(Pos.CENTER);
+
+        resultBox = new VBox(24, titleLabel, score1Label, score2Label, actionBox);
         resultBox.setAlignment(Pos.CENTER);
         resultBox.setPrefSize(Config.WIDTH, Config.HEIGHT);
         // 半透明深色遮罩：覆盖对局画面，突出结算内容
@@ -106,5 +123,10 @@ public class ResultViewImpl implements ResultView {
     @Override
     public void setOnRestart(Runnable action) {
         this.onRestart = action;
+    }
+
+    @Override
+    public void setOnBackToMenu(Runnable action) {
+        this.onBackToMenu = action;
     }
 }

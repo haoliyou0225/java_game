@@ -1,216 +1,88 @@
-// FR-UI InputControllerImpl：双人输入实现（状态校验→置 THROWING→模拟收回，暂停切换），来自 feature_ui 分支
+// FR-18 InputController 实现：justPressed 防抖集合 + 动作派发给 GameActionHandler（薄层，无 JavaFX 依赖）
 package Main.controller;
 
-import Main.config.GameConfig;
 import Main.model.GameModel;
 import Main.model.GameState;
-import Main.model.Hook;
-import Main.model.HookState;
-import Main.model.Item;
-import Main.model.Player;
-import Main.util.LogUtils;
+
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * FR-18 双人按键独立监听 —— 控制器实现。
+ * 双人输入控制器实现（FR-18/FR-19）。
  * <p>
- * 职责：接收 View 层转发的按键事件，校验对局状态后驱动对应玩家的钩爪。
- * 两名玩家的处理逻辑完全独立（各自走独立分支），互不阻塞、互不干扰。
- * <p>
- * 分层约束：本类位于 controller 包，不导入任何 javafx.* 类；
- * 键盘事件由 View/Main 层监听后调用本类方法。
+ * 仅承担两件事：
+ * <ol>
+ *   <li>justPressed 防抖：用并发集合记录“已按下未松开”的 (玩家,动作)，
+ *       长按期间操作系统产生的重复 KEY_PRESSED 事件被直接忽略，单次按下只派发一次；</li>
+ *   <li>纯派发：防抖通过后调用 {@link GameActionHandler#handleAction}，
+ *       状态校验/物理推进/库存扣减/道具效果全部在逻辑层（GameManagerImpl）完成。</li>
+ * </ol>
+ * 本类不 import 任何 JavaFX 类型：View 层完成 KeyCode→语义动作映射后再调用本类，
+ * 因此输入控制层可随 Model 一起在 headless main() 中直接驱动。
  */
 public class InputControllerImpl implements InputController {
 
-    /** 对局模型（通过接口依赖，不依赖具体实现类） */
+    /** 逻辑层只读模型引用（仅用于 pressPause 后返回最新对局状态） */
     private final GameModel model;
 
-    /**
-     * 构造控制器。
-     *
-     * @param model 对局模型，用于读取游戏状态与双方钩爪
-     */
-    public InputControllerImpl(GameModel model) {
+    /** 语义动作处理器（逻辑层，真正执行物理/库存/效果变更） */
+    private final GameActionHandler actionHandler;
+
+    /** 当前“已按下未松开”的动作键集合（justPressed 防抖，支持 FX 线程与游戏线程并发） */
+    private final Set<Long> pressedActions = ConcurrentHashMap.newKeySet();
+
+    /** ESC 防抖标志（双方共用，同帧双人按只触发一次暂停切换） */
+    private volatile boolean pausePressed = false;
+
+    public InputControllerImpl(GameModel model, GameActionHandler actionHandler) {
         this.model = model;
+        this.actionHandler = actionHandler;
     }
 
-    /**
-     * 玩家1释放钩爪（按键 S）。
-     * <p>
-     * 与玩家2逻辑完全对称且独立，通过公共方法 releaseHook 复用同一流程；
-     * 触发后钩爪置为 THROWING，并安排 2 秒后自动收回（P0 模拟）。
-     */
     @Override
-    public void player1ReleaseHook() {
-        releaseHook(model.getHook1(), "玩家1");
+    public void pressAction(int playerId, ActionType action) {
+        if (action == null || action == ActionType.TOGGLE_PAUSE) {
+            return; // 暂停只走 pressPause 通道
+        }
+        long key = actionKey(playerId, action);
+        if (!pressedActions.add(key)) {
+            return; // 已按下未松开：长按/自动重复事件忽略，防止连发
+        }
+        actionHandler.handleAction(playerId, action);
     }
 
-    /**
-     * 玩家2释放钩爪（按键 ↓）。
-     * <p>
-     * 与玩家1逻辑完全对称且独立：处理玩家2时不影响玩家1正在执行的任何动作。
-     */
     @Override
-    public void player2ReleaseHook() {
-        releaseHook(model.getHook2(), "玩家2");
+    public void releaseAction(int playerId, ActionType action) {
+        if (action == null) {
+            return;
+        }
+        if (action == ActionType.TOGGLE_PAUSE) {
+            pausePressed = false; // ESC 松开，允许下次按下再次切换
+            return;
+        }
+        pressedActions.remove(actionKey(playerId, action));
     }
 
-    /**
-     * 玩家1引爆炸药（按键 W）：PLAYING + GRABBING + 有库存时，
-     * 炸毁钩上携带物（从场景移除）、钩爪立即空钩收回、库存减 1。
-     */
     @Override
-    public void player1UseDynamite() {
-        useDynamite(model.getHook1(), model.getPlayer1(), "玩家1");
+    public GameState pressPause() {
+        if (pausePressed) {
+            return model.getState(); // 防抖：ESC 未松开前不重复切换
+        }
+        pausePressed = true;
+        actionHandler.handleAction(0, ActionType.TOGGLE_PAUSE);
+        return model.getState();
     }
 
-    /**
-     * 玩家2引爆炸药（按键 ↑），与玩家1完全对称。
-     */
     @Override
-    public void player2UseDynamite() {
-        useDynamite(model.getHook2(), model.getPlayer2(), "玩家2");
-    }
-
-    /** 玩家1强力药水（按键 A，FR-16）：消耗库存，自身钩爪收回×2 持续 10 秒 */
-    @Override
-    public void player1UsePowerPotion() {
-        usePowerPotion(model.getHook1(), model.getPlayer1(), "玩家1");
-    }
-
-    /** 玩家2强力药水（按键 Num1），与玩家1完全对称 */
-    @Override
-    public void player2UsePowerPotion() {
-        usePowerPotion(model.getHook2(), model.getPlayer2(), "玩家2");
-    }
-
-    /** 玩家1冰冻箱（按键 D，FR-15）：仅对玩家2钩爪生效，冻结 3 秒 */
-    @Override
-    public void player1UseFreezeBox() {
-        useFreezeBox(model.getHook2(), model.getPlayer1(), "玩家1");
-    }
-
-    /** 玩家2冰冻箱（按键 Num2）：仅对玩家1钩爪生效 */
-    @Override
-    public void player2UseFreezeBox() {
-        useFreezeBox(model.getHook1(), model.getPlayer2(), "玩家2");
+    public void resetPressedState() {
+        pressedActions.clear();
+        pausePressed = false;
     }
 
     /**
-     * 强力药水公共流程（FR-16/FR-18）：
-     * 对局中 + 库存 > 0 → 库存减 1，钩爪收回速度 ×2 持续 POWER_POTION_DURATION_SEC 秒；
-     * 已生效时再次使用仅刷新剩余时长（倍率不叠加，由 HookImpl 保证）。
+     * 生成 (玩家,动作) 的唯一长整型键：高 32 位玩家编号，低 32 位动作序号。
      */
-    private void usePowerPotion(Hook hook, Player player, String playerLabel) {
-        if (model.getState() != GameState.PLAYING) {
-            return;
-        }
-        if (hook == null) {
-            return;
-        }
-        if (!player.consumePowerPotion()) {
-            System.out.println(LogUtils.format(playerLabel + " 强力药水库存不足"));
-            return;
-        }
-        hook.applySpeedBoost(GameConfig.POWER_POTION_DURATION_SEC);
-        System.out.println(LogUtils.format(playerLabel + " 使用强力药水，收回速度×2 持续 10 秒，剩余库存: "
-                + player.getPowerPotionCount()));
-    }
-
-    /**
-     * 冰冻箱公共流程（FR-15/FR-16）：
-     * 对局中 + 库存 > 0 → 库存减 1，对方钩爪进入 FROZEN 冻结 HOOK_FREEZE_DURATION_SEC 秒。
-     * 冰冻箱只能作用于对方钩爪（调用方传入的即对钩）。
-     */
-    private void useFreezeBox(Hook opponentHook, Player player, String playerLabel) {
-        if (model.getState() != GameState.PLAYING) {
-            return;
-        }
-        if (opponentHook == null) {
-            return;
-        }
-        if (!player.consumeFreezeBox()) {
-            System.out.println(LogUtils.format(playerLabel + " 冰冻箱库存不足"));
-            return;
-        }
-        opponentHook.freeze(GameConfig.HOOK_FREEZE_DURATION_SEC);
-        System.out.println(LogUtils.format(playerLabel + " 使用冰冻箱，对方钩爪冻结 3 秒，剩余库存: "
-                + player.getFreezeBoxCount()));
-    }
-
-    /**
-     * 引爆炸药公共流程（规格 FR 炸药键）。
-     * 条件链：对局中 → 钩爪正在携带物品（GRABBING）→ 炸药库存 > 0；
-     * 满足后：hook.detachCarriedItem() 让钩爪立即空钩收回并返回携带物，
-     * 玩家库存减 1，物品从场景移除（不计分）。
-     */
-    private void useDynamite(Hook hook, Player player, String playerLabel) {
-        if (model.getState() != GameState.PLAYING) {
-            return;
-        }
-        if (hook == null || hook.getState() != HookState.GRABBING) {
-            return;
-        }
-        if (player.getDynamiteCount() <= 0) {
-            System.out.println(LogUtils.format(playerLabel + " 炸药库存不足"));
-            return;
-        }
-        Item carried = hook.detachCarriedItem();
-        if (carried == null) {
-            return;
-        }
-        player.useDynamite();
-        model.removeItem(carried);
-        System.out.println(LogUtils.format(playerLabel + " 引爆炸药，炸毁物品，剩余炸药: "
-                + player.getDynamiteCount()));
-    }
-
-    /**
-     * 释放指定钩爪的公共流程（FR-11/FR-18）：状态校验 → 调用 hook.throwHook() 触发真实物理抛出。
-     * 真实抛出/收回/抓取状态机由 GameModelImpl.gameLoopTick 每帧推进。
-     *
-     * @param hook        目标钩爪（可为 null，null 时防御性忽略）
-     * @param playerLabel 玩家标签（如 "玩家1"），用于日志输出
-     */
-    private void releaseHook(Hook hook, String playerLabel) {
-        // 非对局中（暂停/结束/准备）忽略输入，防止误触发
-        if (model.getState() != GameState.PLAYING) {
-            return;
-        }
-        if (hook == null) {
-            return;
-        }
-        // hook.throwHook() 内部已做状态校验（非 SWINGING 忽略），无需重复判定
-        HookState before = hook.getState();
-        hook.throwHook();
-        if (hook.getState() == HookState.THROWING && before == HookState.SWINGING) {
-            System.out.println(LogUtils.format(playerLabel + " 释放钩爪，角度: " + formatDegrees(hook.getAngle())));
-        }
-    }
-
-    /**
-     * 暂停/恢复对局（按键 ESC，双方共用）。
-     * PLAYING 与 PAUSED 之间互相切换；其余状态（READY/FINISHED）忽略。
-     * 倒计时/钩爪动画的暂停联动由 GameTimer/GameModel 的状态监听实现。
-     */
-    @Override
-    public void togglePause() {
-        if (model.getState() == GameState.PLAYING) {
-            model.setState(GameState.PAUSED);
-            System.out.println(LogUtils.format("游戏暂停"));
-        } else if (model.getState() == GameState.PAUSED) {
-            model.setState(GameState.PLAYING);
-            System.out.println(LogUtils.format("游戏继续"));
-        }
-        // READY / FINISHED 状态下忽略暂停操作
-    }
-
-    /**
-     * 将钩爪角度（弧度）格式化为日志用的角度字符串，如 "45.0°"。
-     *
-     * @param angleRad 钩爪角度（弧度，Hook 接口约定）
-     * @return 度数文本，保留 1 位小数并带 ° 符号
-     */
-    private String formatDegrees(double angleRad) {
-        return String.format("%.1f°", Math.toDegrees(angleRad));
+    private long actionKey(int playerId, ActionType action) {
+        return ((long) playerId << 32) | action.ordinal();
     }
 }

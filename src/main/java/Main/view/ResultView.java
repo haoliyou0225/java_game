@@ -9,7 +9,7 @@ import javafx.scene.layout.Pane;
  * 胜负结算界面接口（FR-31）
  * <p>
  * 职责：对局结束后读取双方最终分数，完成胜负判定并展示结果；
- * 提供"重新开始"回调，由上层（Main）注入新一轮开局流程。
+ * 提供"重新开始"与"返回主菜单"两个回调，由上层（Main）注入对应流程。
  */
 public interface ResultView {
 
@@ -35,4 +35,12 @@ public interface ResultView {
      * @param action 重新开始流程（不允许为 null）
      */
     void setOnRestart(Runnable action);
+
+    /**
+     * 注入"返回主菜单"回调：点击"返回主菜单"按钮时触发，
+     * 由上层负责释放对局资源、移除结算/对局界面并重新显示主菜单。
+     *
+     * @param action 返回主菜单流程（不允许为 null）
+     */
+    void setOnBackToMenu(Runnable action);
 }

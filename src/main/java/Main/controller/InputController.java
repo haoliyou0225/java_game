@@ -1,63 +1,41 @@
-// FR-UI InputController：双人输入控制器接口（P1/P2 释放钩爪 + ESC 暂停），来自 feature_ui 分支
+// FR-18 双人输入控制器接口：justPressed 防抖 + 语义动作纯派发（不含任何物理/库存修改）
 package Main.controller;
 
+import Main.model.GameState;
+
 /**
- * 双人输入控制器接口（FR-18 双人按键独立监听 + FR-19 暂停/恢复）。
- * 键盘事件由 View/Main 层监听后转发到本层，本层不依赖任何 JavaFX 类型。
+ * 双人输入控制器接口（FR-18 双人按键独立 + FR-19 暂停/恢复）。
+ * <p>
+ * 分层职责：View 层把物理键位映射为 (playerId, {@link ActionType}) 后调用本接口；
+ * 本层只做 justPressed 防抖（长按/系统自动重复不连发）并把动作派发给
+ * {@link GameActionHandler}（逻辑层）。本接口的任何方法都不直接修改钩爪物理、
+ * 库存或道具效果，也不依赖 JavaFX 类型。
  */
 public interface InputController {
 
     /**
-     * 玩家1释放钩爪（按键 S，FR-18）。
-     * 仅在对局进行中（PLAYING）且玩家1钩爪处于 SWINGING 状态时生效；
-     * 触发后钩爪置为 THROWING（抛出飞行），并安排 2 秒后自动收回（P0 模拟）。
+     * 语义动作“按下”：同一 (玩家,动作) 在松开前只生效一次，随后派发给逻辑层。
+     *
+     * @param playerId 1=P1，2=P2
+     * @param action   语义动作（THROW_HOOK / USE_DYNAMITE / 各道具，不含 TOGGLE_PAUSE）
      */
-    void player1ReleaseHook();
+    void pressAction(int playerId, ActionType action);
 
     /**
-     * 玩家2释放钩爪（按键 ↓，FR-18）。
-     * 与玩家1逻辑完全独立、互不阻塞；
-     * 仅在对局进行中且玩家2钩爪处于 SWINGING 状态时生效。
+     * 语义动作“松开”：清除对应防抖标志，使下次按下可以再次触发。
+     * ESC 松开时传 (0, {@link ActionType#TOGGLE_PAUSE}) 复位暂停防抖标志。
      */
-    void player2ReleaseHook();
+    void releaseAction(int playerId, ActionType action);
 
     /**
-     * 玩家1引爆炸药（按键 W）：炸毁当前钩上携带的物品，钩爪立即空钩收回，炸药库存减 1。
-     * 仅在对局进行中、钩爪处于 GRABBING 携带状态、且炸药库存 > 0 时生效。
+     * ESC“按下”（双方共用，justPressed 防抖：双人同帧按也只切换一次）。
+     *
+     * @return 切换后的对局状态（PAUSED/PLAYING），供 View 层显隐暂停遮罩；FINISHED 等状态原样返回
      */
-    void player1UseDynamite();
+    GameState pressPause();
 
     /**
-     * 玩家2引爆炸药（按键 ↑）：逻辑与玩家1完全对称独立。
+     * 清空全部按键防抖标志（窗口失焦时调用，防止“卡键”）。
      */
-    void player2UseDynamite();
-
-    /**
-     * 玩家1使用强力药水（按键 A，FR-16/FR-18）：
-     * 消耗库存 1 瓶，自身钩爪收回速度 ×2 持续 10 秒；生效中再用仅刷新时长。
-     */
-    void player1UsePowerPotion();
-
-    /**
-     * 玩家2使用强力药水（按键 Num1）：逻辑与玩家1完全对称独立。
-     */
-    void player2UsePowerPotion();
-
-    /**
-     * 玩家1使用冰冻箱（按键 D，FR-15/FR-16）：
-     * 消耗库存 1 个，仅对玩家2钩爪生效，冻结 3 秒（运动完全暂停）。
-     */
-    void player1UseFreezeBox();
-
-    /**
-     * 玩家2使用冰冻箱（按键 Num2）：仅对玩家1钩爪生效，逻辑对称独立。
-     */
-    void player2UseFreezeBox();
-
-    /**
-     * 暂停/恢复对局（按键 ESC，双方共用，FR-19）。
-     * PLAYING 与 PAUSED 之间互相切换；READY/FINISHED 状态下忽略。
-     * 倒计时与钩爪收回的冻结由各自持有方监听 GameState 实现。
-     */
-    void togglePause();
+    void resetPressedState();
 }
