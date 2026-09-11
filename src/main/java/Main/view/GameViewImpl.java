@@ -239,8 +239,8 @@ public class GameViewImpl implements GameView {
     }
 
     /**
-     * 石头：底边平直的不规则梯形（堆放在矿洞底部的自然形态），灰色渐变 + 右侧阴影显厚度 + 弧形表面纹路。
-     * 每块石头基于 hashCode 有轻微形状差异。
+     * 石头：圆滚岩石，40 点平滑不规则轮廓 + 灰蓝渐变 + 底部暗影 + 2~3 条裂纹 + 左上高光。
+     * 每块石头基于 hashCode 形状固定但各不相同。
      */
     private void drawStone(GraphicsContext gc, Stone item, double r) {
         double cx = item.getX();
@@ -248,83 +248,82 @@ public class GameViewImpl implements GameView {
         long seed = item.hashCode() & 0x7fffffffL;
         Random rnd = new Random(seed);
 
-        // 10 点多边形：底边平直（自然堆地上），上半部分有棱角
-        // 顶点顺时针排布：从左上顶开始
-        double topY = cy - r * 1.05;
-        double midY = cy - r * 0.35;
-        double botY = cy + r * 0.95;   // 平直底边
-        double topW = r * 0.4 + (rnd.nextDouble() - 0.5) * r * 0.3;
-        double midW = r * 0.85 + (rnd.nextDouble() - 0.5) * r * 0.25;
-        double botW = r * 1.25;
-
-        double[] px = {
-                cx - topW,   topY,                         // 左上尖
-                cx - midW,   midY + rnd.nextDouble() * r * 0.15 - r * 0.075,  // 左中（带起伏）
-                cx - botW,   botY,                         // 左下
-                cx + botW * 0.7, botY,                     // 右下内
-                cx + botW,   botY,                         // 右下外
-                cx + midW,   midY + rnd.nextDouble() * r * 0.15 - r * 0.075,  // 右中
-                cx + topW,   topY,                         // 右上尖
-                cx + topW * 0.5, topY - r * 0.15,          // 顶中（微突）
-                cx - topW * 0.5, topY - r * 0.15,          // 顶中左（微突）
-        };
-        double[] py = new double[px.length / 2];
-        double[] fpx = new double[px.length / 2];
-        for (int i = 0; i < px.length / 2; i++) { fpx[i] = px[i * 2]; py[i] = px[i * 2 + 1]; }
-
-        // 第一遍：整体灰色径向渐变
-        gc.setFill(makeRadial(cx, cy - r * 0.2, r,
-                Color.rgb(210, 212, 215),   // 左上高光
-                Color.rgb(150, 152, 158),    // 中灰
-                Color.rgb(90, 92, 96)));     // 底部暗灰
-        gc.fillPolygon(fpx, py, fpx.length);
-
-        // 第二遍：右侧叠加深灰色阴影（表现石头侧面厚度，像有光照从左上打来）
-        int shadowLen = fpx.length;
-        double[] sxp = new double[shadowLen];
-        double[] syp = new double[shadowLen];
-        // 选取右半部分顶点，向内偏移一点做阴影
-        for (int i = 0; i < shadowLen; i++) {
-            // 只对 cx 右侧的顶点加深色阴影
-            if (fpx[i] > cx - r * 0.1) {
-                sxp[i] = fpx[i] - r * 0.05;
-                syp[i] = py[i] + r * 0.02;
-            } else {
-                sxp[i] = fpx[i];
-                syp[i] = py[i];
-            }
+        // 40 点平滑轮廓：2~3 个低频正弦波叠加，振幅比金块小（岩石更圆润）
+        int points = 40;
+        double[] xs = new double[points];
+        double[] ys = new double[points];
+        int waves = 2 + rnd.nextInt(2);
+        double[] waveAmp = new double[waves];
+        double[] wavePhase = new double[waves];
+        for (int i = 0; i < waves; i++) {
+            waveAmp[i] = 0.06 + rnd.nextDouble() * 0.07;
+            wavePhase[i] = rnd.nextDouble() * Math.PI * 2;
         }
-        gc.setFill(Color.rgb(70, 72, 78, 0.35));
-        gc.fillPolygon(sxp, syp, shadowLen);
+        // 整体形状微扁（石头比金块扁一点）
+        double squashY = 0.88;
 
-        // 深色描边（更粗，轮廓清晰）
-        gc.setStroke(Color.rgb(40, 40, 45));
-        gc.setLineWidth(2.2);
-        gc.strokePolygon(fpx, py, fpx.length);
+        for (int i = 0; i < points; i++) {
+            double angle = (double) i / points * Math.PI * 2;
+            double rr = 1.0;
+            for (int w = 0; w < waves; w++) {
+                rr += waveAmp[w] * Math.sin((w + 2) * angle + wavePhase[w]);
+            }
+            rr = Math.max(0.82, Math.min(1.15, rr));
+            xs[i] = cx + Math.cos(angle) * r * rr;
+            ys[i] = cy + Math.sin(angle) * r * rr * squashY;
+        }
 
-        // 弧形表面纹路（2-3 条，模拟岩石自然弯曲的纹理）
-        gc.setStroke(Color.rgb(100, 102, 108, 0.55));
+        // 灰蓝渐变：左上高光 → 中灰 → 底部暗灰蓝
+        gc.setFill(new RadialGradient(
+                0, 0,
+                cx - r * 0.3, cy - r * 0.35,
+                r * 1.4, false, CycleMethod.NO_CYCLE,
+                new Stop(0.00, Color.rgb(215, 218, 222)),
+                new Stop(0.50, Color.rgb(140, 144, 152)),
+                new Stop(1.00, Color.rgb(60, 62, 68))));
+        gc.fillPolygon(xs, ys, points);
+
+        // 底部暗影椭圆（石头放在地面上的接触阴影）
+        gc.setFill(Color.rgb(20, 20, 24, 0.35));
+        gc.fillOval(cx - r * 0.8, cy + r * 0.6, r * 1.6, r * 0.35);
+
+        // 深灰描边
+        gc.setStroke(Color.rgb(35, 35, 40));
+        gc.setLineWidth(2.0);
+        gc.strokePolygon(xs, ys, points);
+
+        // 裂纹（2~3 条，从边缘向内延伸的短折线）
+        gc.setStroke(Color.rgb(80, 82, 88, 0.6));
         gc.setLineWidth(1.0);
-        int lines = 2 + rnd.nextInt(2);
-        for (int i = 0; i < lines; i++) {
-            double ly = cy - r * 0.2 + i * r * 0.32 + rnd.nextDouble() * r * 0.1;
-            double lx1 = cx - r * 0.85 + rnd.nextDouble() * r * 0.2;
-            double lx2 = cx + r * 0.75 + rnd.nextDouble() * r * 0.2;
-            // 用 quadraticCurveTo 画弧形纹路
+        int cracks = 2 + rnd.nextInt(2);
+        for (int i = 0; i < cracks; i++) {
+            // 裂纹起点在轮廓上
+            double startAngle = rnd.nextDouble() * Math.PI * 2;
+            double sx = cx + Math.cos(startAngle) * r * 0.9;
+            double sy = cy + Math.sin(startAngle) * r * 0.9 * squashY;
+            // 裂纹向内延伸，分 2~3 段折线
             gc.beginPath();
-            gc.moveTo(lx1, ly);
-            double midx = (lx1 + lx2) / 2;
-            double midy = ly + (rnd.nextBoolean() ? 1 : -1) * r * 0.08;
-            gc.quadraticCurveTo(midx, midy, lx2, ly);
+            gc.moveTo(sx, sy);
+            double px = sx;
+            double py = sy;
+            int segs = 2 + rnd.nextInt(2);
+            for (int s = 0; s < segs; s++) {
+                double dx = (rnd.nextDouble() - 0.5) * r * 0.5;
+                double dy = (rnd.nextDouble() - 0.5) * r * 0.5;
+                px += dx;
+                py += dy;
+                gc.lineTo(px, py);
+            }
             gc.stroke();
         }
 
-        // 左上高光小三角切面
-        gc.setFill(Color.rgb(230, 232, 238, 0.45));
+        // 左上弧形高光带
+        gc.setFill(Color.rgb(240, 242, 248, 0.3));
         gc.beginPath();
-        gc.moveTo(cx - topW * 0.8, topY + r * 0.05);
-        gc.lineTo(cx - topW * 0.2, topY - r * 0.1);
-        gc.lineTo(cx - midW * 0.6, midY - r * 0.05);
+        gc.moveTo(cx - r * 0.6, cy - r * 0.5);
+        gc.quadraticCurveTo(cx, cy - r * 0.85, cx + r * 0.4, cy - r * 0.4);
+        gc.lineTo(cx + r * 0.3, cy - r * 0.28);
+        gc.quadraticCurveTo(cx - r * 0.1, cy - r * 0.65, cx - r * 0.52, cy - r * 0.38);
         gc.closePath();
         gc.fill();
     }
