@@ -115,11 +115,11 @@ public class GameViewImpl implements GameView {
             }
         }
 
-        // 6. 玩家1钩爪（蓝色）：起点标记 + 绳索 + 钩爪头
-        drawHook(gc, model.getHook1(), Color.DODGERBLUE);
+        // 6. 玩家1钩爪（黑色绳索）：起点标记 + 绳索 + 钩爪头
+        drawHook(gc, model.getHook1(), Color.BLACK);
 
-        // 7. 玩家2钩爪（红色）
-        drawHook(gc, model.getHook2(), Color.CRIMSON);
+        // 7. 玩家2钩爪（黑色绳索）
+        drawHook(gc, model.getHook2(), Color.BLACK);
     }
 
     /** 创建径向渐变：左上高光 */
