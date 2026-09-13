@@ -2,6 +2,7 @@
 package Main.model;
 
 import Main.config.GameConfig;
+import Main.config.GameSettings;
 import Main.util.CollisionUtil;
 
 import java.util.ArrayList;
@@ -13,8 +14,8 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 钩子实体实现（严格按钩子玩法规格）
  * 状态机：
- *   SWINGING 钟摆（±1.25rad，1.5rad/s）
- *     → THROWING 沿当前角度直线抛出（500px/s，触边界/最大绳长转 RETRACTING）
+ *   SWINGING 钟摆（±1.25rad，1.5rad/s × 设置速度倍率）
+ *     → THROWING 沿当前角度直线抛出（500px/s × 设置速度倍率，触边界/最大绳长转 RETRACTING）
  *       → GRABBING 携带物品收回（轻1.2s/中2.5s/重5.0s）→ SWINGING
  *       → RETRACTING 空钩收回（800px/s）→ SWINGING
  *     → STUNNED 碰撞点冻结2秒（无法操作）→ RETRACTING → SWINGING
@@ -83,10 +84,10 @@ public class HookImpl implements Hook {
         rope.setCurrentLen(ropeLength);
     }
 
-    /** 钟摆摆动：固定角速度 1.5rad/s，幅度 ±1.25rad */
+    /** 钟摆摆动：基础角速度 1.5rad/s × 设置速度倍率（主界面“设置”面板调节），幅度 ±1.25rad */
     @Override
     public void updateSwing(double deltaTime) {
-        angle += swingDir * GameConfig.HOOK_SWING_SPEED * deltaTime;
+        angle += swingDir * GameConfig.HOOK_SWING_SPEED * GameSettings.getHookSpeedMultiplier() * deltaTime;
         double max = Math.PI / 2 + GameConfig.HOOK_SWING_MAX_OFFSET;
         double min = Math.PI / 2 - GameConfig.HOOK_SWING_MAX_OFFSET;
         if (angle > max) {
@@ -155,7 +156,8 @@ public class HookImpl implements Hook {
                 updateSwing(deltaTime);
                 break;
             case THROWING:
-                ropeLength += GameConfig.HOOK_THROW_SPEED * deltaTime;
+                // 抛出速度 = 基础速度 × 设置倍率（主界面“设置”面板调节）
+                ropeLength += GameConfig.HOOK_THROW_SPEED * GameSettings.getHookSpeedMultiplier() * deltaTime;
                 if (hitBoundary() || ropeLength >= rope.getMaxLen()) {
                     // 触达矿洞边界/最大绳长 → 空钩收回
                     ropeLength = Math.min(ropeLength, rope.getMaxLen());
@@ -176,8 +178,9 @@ public class HookImpl implements Hook {
                 if (arrivedGrab) state = HookState.SWINGING;
                 break;
             case RETRACTING:
-                // 空钩固定 800px/s（强力药水生效 ×2）
+                // 空钩固定 800px/s × 设置倍率（强力药水生效 ×2）
                 double emptySpeed = GameConfig.HOOK_EMPTY_RETRACT_SPEED
+                        * GameSettings.getHookSpeedMultiplier()
                         * (speedBoostTimer > 0 ? GameConfig.HOOK_SPEED_BOOST_MULTIPLIER : 1.0);
                 ropeLength -= emptySpeed * deltaTime;
                 boolean arrivedEmpty = ropeLength <= SWING_LENGTH;
@@ -293,14 +296,14 @@ public class HookImpl implements Hook {
 
     /**
      * 携带物品收回速度（FR-04/FR-10）：
-     * 速度 = 抓取瞬间绳长 / 该物品 getRetractDuration() 指定耗时；
-     * 强力药水生效期间（FR-16）整体 ×2。
+     * 速度 = 抓取瞬间绳长 / 该物品 getRetractDuration() 指定耗时，
+     * 再乘设置面板的钩爪速度倍率；强力药水生效期间（FR-16）整体 ×2。
      */
     private double carriedRetractSpeed() {
         double duration = grabbedItem == null
                 ? GameConfig.RETRACT_TIME_LIGHT
                 : grabbedItem.getRetractDuration();
-        double speed = grabRopeLength / duration;
+        double speed = grabRopeLength / duration * GameSettings.getHookSpeedMultiplier();
         if (speedBoostTimer > 0) {
             speed *= GameConfig.HOOK_SPEED_BOOST_MULTIPLIER;
         }

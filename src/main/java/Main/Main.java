@@ -13,6 +13,7 @@ import Main.model.GameModel;
 import Main.model.GameState;
 import Main.view.HUDView;
 import Main.view.HUDViewImpl;
+import Main.view.AudioManager;
 import Main.view.ControlGuidePane;
 import Main.view.GameView;
 import Main.view.GameViewImpl;
@@ -22,6 +23,7 @@ import Main.view.PauseView;
 import Main.view.PauseViewImpl;
 import Main.view.ResultView;
 import Main.view.ResultViewImpl;
+import Main.view.SettingsPane;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -102,6 +104,9 @@ public class Main extends Application {
 
         primaryStage.show(); // 显示窗口
 
+        // 背景音乐：全局循环播放（主菜单/对局/结算共用），音量由设置面板实时调节
+        AudioManager.get().startMusic();
+
         showMainMenu(root, primaryStage);
     }
 
@@ -135,6 +140,9 @@ public class Main extends Application {
 
         // 点击"新手指南"：弹出独立的模态指南窗口（不离开主菜单，关闭即返回）
         menuView.setOnOpenGuide(() -> openGuideWindow(stage));
+
+        // 点击"设置"：弹出独立的模态设置窗口（音乐/音效/钩爪速度，关闭即返回）
+        menuView.setOnOpenSettings(() -> openSettingsWindow(stage));
 
         // 点击"退出游戏"：关闭游戏窗口
         menuView.setOnExit(stage::close);
@@ -210,6 +218,62 @@ public class Main extends Application {
         // 相对主窗口居中（show 后才能拿到实际宽高）
         guideStage.setX(owner.getX() + (owner.getWidth() - guideStage.getWidth()) / 2);
         guideStage.setY(owner.getY() + (owner.getHeight() - guideStage.getHeight()) / 2);
+    }
+
+    /**
+     * 打开"设置"独立窗口：调节音乐音量/音效音量/钩爪速度。
+     * <p>
+     * 实现要点（与 {@link #openGuideWindow(Stage)} 同一套模式）：
+     * 1. 独立 {@link Stage} + {@link Modality#APPLICATION_MODAL}：弹出期间主菜单不可点击；
+     * 2. 内容使用可复用组件 {@link SettingsPane}（三个滑块 + 返回按钮），
+     *    拖动滑块实时写回 {@link Main.config.GameSettings} 并即时生效（音量/速度）；
+     * 3. 场景逻辑分辨率 860×560，屏幕可用区不足时对内容等比 {@link Scale} 缩放；
+     * 4. 关闭后自动返回主菜单；onHidden 中清空内容引用，避免关闭后监听器仍被持有。
+     *
+     * @param owner 主窗口（作为模态属主，设置窗口相对它居中）
+     */
+    private void openSettingsWindow(Stage owner) {
+        Stage settingsStage = new Stage();
+        settingsStage.initOwner(owner);
+        // 应用级模态：设置窗口弹出期间屏蔽主菜单输入
+        settingsStage.initModality(Modality.APPLICATION_MODAL);
+        settingsStage.setTitle("设置");
+        settingsStage.setResizable(false);
+
+        // 可复用内容组件：音乐音量 / 音效音量 / 钩爪速度
+        SettingsPane settingsPane = new SettingsPane();
+        settingsPane.setOnBack(settingsStage::close);
+
+        // 内容容器：与主菜单一致的矿洞背景，设置卡片在其中水平垂直居中
+        VBox contentBox = new VBox(settingsPane);
+        contentBox.setAlignment(Pos.CENTER);
+        contentBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2b1a0e, #4a2f17);");
+
+        // 场景逻辑分辨率：860×560（设置项较少，无需滚动）
+        Scene scene = new Scene(contentBox, 860, 560);
+        settingsStage.setScene(scene);
+
+        // 多分辨率适配：屏幕可用区小于逻辑分辨率时，等比缩放内容（缩放原点为左上角）
+        Rectangle2D visualBounds = Screen.getPrimary().getVisualBounds();
+        double scale = Math.min(1.0,
+                Math.min(visualBounds.getWidth() / 860.0,
+                        visualBounds.getHeight() / 560.0));
+        if (scale < 1.0) {
+            contentBox.getTransforms().add(new Scale(scale, scale, 0, 0));
+            settingsStage.setWidth(860 * scale);
+            settingsStage.setHeight(560 * scale);
+        }
+
+        // 关闭清理：本窗口自身不注册游戏按键逻辑，这里再做防御性解绑与引用释放
+        settingsStage.setOnHidden(e -> {
+            scene.setOnKeyPressed(null);
+            scene.setOnKeyReleased(null);
+        });
+
+        settingsStage.show();
+        // 相对主窗口居中（show 后才能拿到实际宽高）
+        settingsStage.setX(owner.getX() + (owner.getWidth() - settingsStage.getWidth()) / 2);
+        settingsStage.setY(owner.getY() + (owner.getHeight() - settingsStage.getHeight()) / 2);
     }
 
     /**
@@ -381,6 +445,9 @@ public class Main extends Application {
     private void showResultFlow(Pane root, Pane gamePane, GameModel model, GameTimer timer) {
         // 对局结束：先释放模型后台资源（钩爪收回线程池），防止反复开局累积线程
         model.shutdown();
+
+        // 对局结束音效（结算面板弹出时播放）
+        AudioManager.get().playSfx("finish");
 
         ResultView resultView = new ResultViewImpl();
 

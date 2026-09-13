@@ -25,12 +25,13 @@ import javafx.scene.layout.VBox;
  * <ul>
  *   <li>背景层：menu-background.png 拉伸填充整个 1280×720 窗口；</li>
  *   <li>标题层：gold-miner-text.png 作为标题图片，水平居中，位于画面上半部；</li>
- *   <li>按钮层：开始对战 / 新手指南 / 退出游戏 三个按钮纵向排列，水平居中，
+ *   <li>按钮层：开始对战 / 新手指南 / 设置 / 退出游戏 四个按钮纵向排列，水平居中，
  *       位于标题下方，样式由 {@link UiStyle#createGoldButton} 统一提供（样式不变）。</li>
  * </ul>
  * <p>
  * 说明：完整的双人键位表与游戏规则已抽取到可复用组件 {@link ControlGuidePane}，
- * 由“新手指南”按钮回调上层弹出独立窗口展示（FR-26）。
+ * 由“新手指南”按钮回调上层弹出独立窗口展示（FR-26）；
+ * 音乐/音效/钩爪速度设置已抽取到可复用组件 {@link SettingsPane}，由“设置”按钮回调上层弹出。
  */
 public class MenuViewImpl implements MenuView {
 
@@ -43,6 +44,9 @@ public class MenuViewImpl implements MenuView {
     /** 新手指南按钮（点击后由上层弹出独立指南窗口） */
     private final Button guideButton;
 
+    /** 设置按钮（点击后由上层弹出独立设置窗口） */
+    private final Button settingsButton;
+
     /** 退出游戏按钮 */
     private final Button exitButton;
 
@@ -51,6 +55,9 @@ public class MenuViewImpl implements MenuView {
 
     /** 由上层注入的打开新手指南窗口回调 */
     private Runnable onOpenGuide;
+
+    /** 由上层注入的打开设置窗口回调 */
+    private Runnable onOpenSettings;
 
     /** 由上层注入的退出游戏回调 */
     private Runnable onExit;
@@ -77,7 +84,7 @@ public class MenuViewImpl implements MenuView {
         subtitleLabel.setStyle("-fx-font-size: 24px; -fx-text-fill: #e8c87a; "
                 + "-fx-effect: dropshadow(one-pass-box, #000000, 3, 1.0, 1, 1);");
 
-        // ---- 三个按钮（样式由 UiStyle 统一提供，样式不变）----
+        // ---- 四个按钮（样式由 UiStyle 统一提供，样式不变）----
         startButton = UiStyle.createGoldButton("开始对战");
         startButton.setOnAction(e -> {
             if (onStartGame != null) {
@@ -92,6 +99,13 @@ public class MenuViewImpl implements MenuView {
             }
         });
 
+        settingsButton = UiStyle.createGoldButton("设置");
+        settingsButton.setOnAction(e -> {
+            if (onOpenSettings != null) {
+                onOpenSettings.run();
+            }
+        });
+
         exitButton = UiStyle.createGoldButton("退出游戏");
         exitButton.setOnAction(e -> {
             if (onExit != null) {
@@ -99,8 +113,9 @@ public class MenuViewImpl implements MenuView {
             }
         });
 
-        // ---- 内容层：标题图 + 副标题 + 三按钮，纵向居中排列 ----
-        VBox contentBox = new VBox(24, titleView, subtitleLabel, startButton, guideButton, exitButton);
+        // ---- 内容层：标题图 + 副标题 + 四按钮，纵向居中排列 ----
+        VBox contentBox = new VBox(22, titleView, subtitleLabel, startButton, guideButton,
+                settingsButton, exitButton);
         contentBox.setAlignment(Pos.CENTER);
         contentBox.setPadding(new Insets(60, 0, 0, 0)); // 整体略微上移，让标题位于画面上半部
         contentBox.setPrefSize(Config.WIDTH, Config.HEIGHT);
@@ -135,6 +150,11 @@ public class MenuViewImpl implements MenuView {
     @Override
     public void setOnOpenGuide(Runnable action) {
         this.onOpenGuide = action;
+    }
+
+    @Override
+    public void setOnOpenSettings(Runnable action) {
+        this.onOpenSettings = action;
     }
 
     @Override

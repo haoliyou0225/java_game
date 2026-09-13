@@ -6,13 +6,13 @@ import javafx.scene.layout.Pane;
 
 /**
  * 主菜单视图接口（FR-32）
- * 职责：构建并展示主菜单 UI（标题 GoldMainer + 开始对战 + 新手指南 + 退出游戏）。
- * 按钮点击后的业务行为（开局流程、打开指南窗口、关闭窗口）不在本层实现，
+ * 职责：构建并展示主菜单 UI（标题 GoldMainer + 开始对战 + 新手指南 + 设置 + 退出游戏）。
+ * 按钮点击后的业务行为（开局流程、打开指南/设置窗口、关闭窗口）不在本层实现，
  * 而是通过回调交由上层（程序入口）绑定，保持视图与逻辑解耦。
  */
 public interface MenuView {
 
-    /** 构建主菜单 UI 节点（标题、开始对战按钮、新手指南按钮、退出游戏按钮） */
+    /** 构建主菜单 UI 节点（标题、开始对战按钮、新手指南按钮、设置按钮、退出游戏按钮） */
     Parent build();
 
     /** 将主菜单挂载到指定容器并显示 */
@@ -26,6 +26,9 @@ public interface MenuView {
 
     /** 注册"新手指南"按钮回调（由上层弹出独立的操作指南窗口） */
     void setOnOpenGuide(Runnable action);
+
+    /** 注册"设置"按钮回调（由上层弹出独立的设置窗口） */
+    void setOnOpenSettings(Runnable action);
 
     /** 注册"退出游戏"按钮回调（由上层关闭游戏窗口） */
     void setOnExit(Runnable action);

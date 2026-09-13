@@ -1,6 +1,7 @@
 // FR-UI UiStyle：视图公共工具（金色按钮样式/幂等挂载卸载），来自 feature_ui 分支
 package Main.view;
 
+import javafx.event.ActionEvent;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -55,6 +56,8 @@ public final class UiStyle {
         // 悬停效果：颜色加深
         button.setOnMouseEntered(e -> button.setStyle(BUTTON_HOVER_STYLE));
         button.setOnMouseExited(e -> button.setStyle(BUTTON_STYLE));
+        // 点击音效：addEventHandler 不覆盖调用方 setOnAction 的回调，两者共存
+        button.addEventHandler(ActionEvent.ACTION, e -> AudioManager.get().playSfx("Select"));
         return button;
     }
 

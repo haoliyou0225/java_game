@@ -9,6 +9,7 @@ import Main.model.DiamondPig;
 import Main.model.GameModel;
 import Main.model.Gold;
 import Main.model.Hook;
+import Main.model.HookState;
 import Main.model.Item;
 import Main.model.MediumGold;
 import Main.model.MineMap;
@@ -58,6 +59,15 @@ public class GameViewImpl implements GameView {
     /** 矿洞背景图（构造时从 classpath 加载一次，复用给每帧渲染；加载失败为 null 时回退纯色） */
     private final Image caveBgImage;
 
+    /** 上一帧 P1 钩子状态（检测进入 GRABBING 时播放抓取音效，初始 null） */
+    private HookState prevHook1State;
+
+    /** 上一帧 P2 钩子状态（同上） */
+    private HookState prevHook2State;
+
+    /** 上一帧场上炸弹数量（-1 表示尚未渲染过；数量减少即 TNT 爆炸，播放炸弹音效） */
+    private int prevBombCount = -1;
+
     public GameViewImpl(Canvas canvas) {
         this.canvas = canvas;
         Image bg = null;
@@ -75,6 +85,9 @@ public class GameViewImpl implements GameView {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         double w = canvas.getWidth();
         double h = canvas.getHeight();
+
+        // 0. 音效检测：TNT 爆炸（炸弹数量减少）与抓取成功（钩子状态进入 GRABBING）
+        detectSfxEvents(model);
 
         // 1. 矿洞背景：优先 mineBG1.png 全屏拉伸，加载失败回退纯色矿洞
         if (caveBgImage != null) {
@@ -120,6 +133,48 @@ public class GameViewImpl implements GameView {
 
         // 7. 玩家2钩爪（黑色绳索）
         drawHook(gc, model.getHook2(), Color.BLACK);
+    }
+
+    /**
+     * 每帧音效检测（仅 View 层状态变化检测，不修改游戏逻辑）：
+     * <ul>
+     *   <li>场上炸弹数量比上一帧减少 → TNT 爆炸，播放 bomb 音效；</li>
+     *   <li>任一钩子状态从非 GRABBING 变为 GRABBING → 抓取成功，播放 largegold 音效。</li>
+     * </ul>
+     */
+    private void detectSfxEvents(GameModel model) {
+        MineMap mineMap = model.getMineMap();
+        if (mineMap != null && mineMap.getItems() != null) {
+            int bombCount = 0;
+            for (Item item : mineMap.getItems()) {
+                if (item instanceof Bomb) {
+                    bombCount++;
+                }
+            }
+            if (prevBombCount >= 0 && bombCount < prevBombCount) {
+                AudioManager.get().playSfx("bomb");
+            }
+            prevBombCount = bombCount;
+        }
+        detectGrabSfx(model.getHook1(), true);
+        detectGrabSfx(model.getHook2(), false);
+    }
+
+    /** 检测单个钩子是否本帧刚进入 GRABBING（前一帧非 GRABBING），是则播放抓取音效 */
+    private void detectGrabSfx(Hook hook, boolean isHook1) {
+        if (hook == null) {
+            return;
+        }
+        HookState prev = isHook1 ? prevHook1State : prevHook2State;
+        HookState current = hook.getState();
+        if (prev != HookState.GRABBING && current == HookState.GRABBING) {
+            AudioManager.get().playSfx("largegold");
+        }
+        if (isHook1) {
+            prevHook1State = current;
+        } else {
+            prevHook2State = current;
+        }
     }
 
     /** 创建径向渐变：左上高光 */

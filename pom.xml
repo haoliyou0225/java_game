@@ -21,6 +21,13 @@
             <version>17.0.13</version>
         </dependency>
 
+        <!-- JavaFX 媒体库：背景音乐与音效播放（设置界面音量调节） -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-media</artifactId>
+            <version>17.0.13</version>
+        </dependency>
+
     </dependencies>
 
     <build>
