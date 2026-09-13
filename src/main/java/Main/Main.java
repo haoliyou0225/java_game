@@ -343,25 +343,34 @@ public class Main extends Application {
      * @return 映射结果；非游戏按键返回 null
      */
     private static KeyBinding mapKeyBinding(KeyCode code) {
-        return switch (code) {
+        // 注意：这里刻意使用传统 switch 语句（每分支直接 return），
+        // 不用 switch 表达式——Temurin 17.0.20 的 javac 对
+        // "多分支 new 对象 + default null" 的 switch 表达式会生成
+        // 错误的 StackMapTable（合并帧被写成 java/lang/Object），触发 VerifyError。
+        switch (code) {
             // ===== 玩家1 =====
-            case S -> new KeyBinding(1, ActionType.THROW_HOOK);
-            case W -> new KeyBinding(1, ActionType.USE_DYNAMITE);
-            case A -> new KeyBinding(1, ActionType.USE_POWER_POTION);
-            case D -> new KeyBinding(1, ActionType.USE_FREEZE_BOX);
-            case F -> new KeyBinding(1, ActionType.USE_LUCKY_CLOVER);
-            case G -> new KeyBinding(1, ActionType.USE_DIAMOND_BOOST);
-            case H -> new KeyBinding(1, ActionType.USE_STONE_BOOK);
+            case S: return new KeyBinding(1, ActionType.THROW_HOOK);
+            case W: return new KeyBinding(1, ActionType.USE_DYNAMITE);
+            case A: return new KeyBinding(1, ActionType.USE_POWER_POTION);
+            case D: return new KeyBinding(1, ActionType.USE_FREEZE_BOX);
+            case F: return new KeyBinding(1, ActionType.USE_LUCKY_CLOVER);
+            case G: return new KeyBinding(1, ActionType.USE_DIAMOND_BOOST);
+            case H: return new KeyBinding(1, ActionType.USE_STONE_BOOK);
             // ===== 玩家2（NUMPADn 为主，DIGITn 为无小键盘键盘的别名） =====
-            case DOWN -> new KeyBinding(2, ActionType.THROW_HOOK);
-            case UP -> new KeyBinding(2, ActionType.USE_DYNAMITE);
-            case NUMPAD1, DIGIT1 -> new KeyBinding(2, ActionType.USE_POWER_POTION);
-            case NUMPAD2, DIGIT2 -> new KeyBinding(2, ActionType.USE_FREEZE_BOX);
-            case NUMPAD3, DIGIT3 -> new KeyBinding(2, ActionType.USE_LUCKY_CLOVER);
-            case NUMPAD4, DIGIT4 -> new KeyBinding(2, ActionType.USE_DIAMOND_BOOST);
-            case NUMPAD5, DIGIT5 -> new KeyBinding(2, ActionType.USE_STONE_BOOK);
-            default -> null;
-        };
+            case DOWN: return new KeyBinding(2, ActionType.THROW_HOOK);
+            case UP: return new KeyBinding(2, ActionType.USE_DYNAMITE);
+            case NUMPAD1:
+            case DIGIT1: return new KeyBinding(2, ActionType.USE_POWER_POTION);
+            case NUMPAD2:
+            case DIGIT2: return new KeyBinding(2, ActionType.USE_FREEZE_BOX);
+            case NUMPAD3:
+            case DIGIT3: return new KeyBinding(2, ActionType.USE_LUCKY_CLOVER);
+            case NUMPAD4:
+            case DIGIT4: return new KeyBinding(2, ActionType.USE_DIAMOND_BOOST);
+            case NUMPAD5:
+            case DIGIT5: return new KeyBinding(2, ActionType.USE_STONE_BOOK);
+            default: return null;
+        }
     }
 
     /**
