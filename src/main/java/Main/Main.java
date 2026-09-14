@@ -413,25 +413,34 @@ public class Main extends Application {
      * @return 映射结果；非游戏按键返回 null
      */
     private static KeyBinding mapKeyBinding(KeyCode code) {
-        // 用 if-else 链替代 switch 表达式：规避 JDK javac 在 switch 表达式返回嵌套 record 类型时
-        // 误推断 default 分支栈类型为 Object 的 VerifyError（JDK-8303673）
-        // ===== 玩家1 =====
-        if (code == KeyCode.S) return new KeyBinding(1, ActionType.THROW_HOOK);
-        if (code == KeyCode.W) return new KeyBinding(1, ActionType.USE_DYNAMITE);
-        if (code == KeyCode.A) return new KeyBinding(1, ActionType.USE_POWER_POTION);
-        if (code == KeyCode.D) return new KeyBinding(1, ActionType.USE_FREEZE_BOX);
-        if (code == KeyCode.F) return new KeyBinding(1, ActionType.USE_LUCKY_CLOVER);
-        if (code == KeyCode.G) return new KeyBinding(1, ActionType.USE_DIAMOND_BOOST);
-        if (code == KeyCode.H) return new KeyBinding(1, ActionType.USE_STONE_BOOK);
-        // ===== 玩家2（NUMPADn 为主，DIGITn 为无小键盘键盘的别名） =====
-        if (code == KeyCode.DOWN) return new KeyBinding(2, ActionType.THROW_HOOK);
-        if (code == KeyCode.UP) return new KeyBinding(2, ActionType.USE_DYNAMITE);
-        if (code == KeyCode.NUMPAD1 || code == KeyCode.DIGIT1) return new KeyBinding(2, ActionType.USE_POWER_POTION);
-        if (code == KeyCode.NUMPAD2 || code == KeyCode.DIGIT2) return new KeyBinding(2, ActionType.USE_FREEZE_BOX);
-        if (code == KeyCode.NUMPAD3 || code == KeyCode.DIGIT3) return new KeyBinding(2, ActionType.USE_LUCKY_CLOVER);
-        if (code == KeyCode.NUMPAD4 || code == KeyCode.DIGIT4) return new KeyBinding(2, ActionType.USE_DIAMOND_BOOST);
-        if (code == KeyCode.NUMPAD5 || code == KeyCode.DIGIT5) return new KeyBinding(2, ActionType.USE_STONE_BOOK);
-        return null;
+        // 注意：这里刻意使用传统 switch 语句（每分支直接 return），
+        // 不用 switch 表达式——Temurin 17.0.20 的 javac 对
+        // "多分支 new 对象 + default null" 的 switch 表达式会生成
+        // 错误的 StackMapTable（合并帧被写成 java/lang/Object），触发 VerifyError。
+        switch (code) {
+            // ===== 玩家1 =====
+            case S: return new KeyBinding(1, ActionType.THROW_HOOK);
+            case W: return new KeyBinding(1, ActionType.USE_DYNAMITE);
+            case A: return new KeyBinding(1, ActionType.USE_POWER_POTION);
+            case D: return new KeyBinding(1, ActionType.USE_FREEZE_BOX);
+            case F: return new KeyBinding(1, ActionType.USE_LUCKY_CLOVER);
+            case G: return new KeyBinding(1, ActionType.USE_DIAMOND_BOOST);
+            case H: return new KeyBinding(1, ActionType.USE_STONE_BOOK);
+            // ===== 玩家2（NUMPADn 为主，DIGITn 为无小键盘键盘的别名） =====
+            case DOWN: return new KeyBinding(2, ActionType.THROW_HOOK);
+            case UP: return new KeyBinding(2, ActionType.USE_DYNAMITE);
+            case NUMPAD1:
+            case DIGIT1: return new KeyBinding(2, ActionType.USE_POWER_POTION);
+            case NUMPAD2:
+            case DIGIT2: return new KeyBinding(2, ActionType.USE_FREEZE_BOX);
+            case NUMPAD3:
+            case DIGIT3: return new KeyBinding(2, ActionType.USE_LUCKY_CLOVER);
+            case NUMPAD4:
+            case DIGIT4: return new KeyBinding(2, ActionType.USE_DIAMOND_BOOST);
+            case NUMPAD5:
+            case DIGIT5: return new KeyBinding(2, ActionType.USE_STONE_BOOK);
+            default: return null;
+        }
     }
 
     /**
