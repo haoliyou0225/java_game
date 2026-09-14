@@ -193,9 +193,13 @@ public class HookImpl implements Hook {
                 }
                 break;
             case STUNNED:
-                // 碰撞点冻结，绳长不变、无法操作；倒计时结束自动空钩收回
+                // 碰撞点冻结，绳长不变、无法操作；倒计时结束：携带物品在冻结点放下（保持可再抓取），空钩收回
                 stunTimer -= deltaTime;
                 if (stunTimer <= 0) {
+                    if (grabbedItem != null) {
+                        grabbedItem.setGrabbed(false);
+                        grabbedItem = null;
+                    }
                     state = HookState.RETRACTING;
                 }
                 break;
@@ -383,10 +387,12 @@ public class HookImpl implements Hook {
         }
     }
 
-    /** 进入眩晕：碰撞点冻结2秒，松开携带物品（归属/原位由 GameManager 处理），结束自动空钩收回 */
+    /**
+     * 进入眩晕：碰撞点冻结2秒，携带物品随钩一起冻结；
+     * 解冻时物品留在当前碰撞点（由 STUNNED 到期逻辑释放），钩子空钩收回。
+     */
     @Override
     public void stun() {
-        this.grabbedItem = null;
         this.stunTimer = GameConfig.HOOK_STUN_DURATION_SEC;
         this.state = HookState.STUNNED;
     }

@@ -55,6 +55,9 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
     /** 钓获反馈回调（物品被成功拉回并完成结算后触发，传递给视图层显示） */
     private Consumer<CatchFeedbackEvent> onCatchSettled;
 
+    /** 上一帧双钩是否处于钩尖相撞状态（边沿检测：仅“未相撞→相撞”瞬间触发一次冻结，解冻收回途中钩尖未分离前不重复冻结，防卡死） */
+    private boolean hooksColliding;
+
     public GameManagerImpl() {
         // hook 原版初始化
         this.ropeP1 = new RopeImpl(GameConfig.ROPE_MAX_EXTEND_LENGTH);
@@ -338,8 +341,9 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
     /**
      * 双钩冲突裁决（规格 FR-12）：
      * 1) 抢夺：双钩在 ≤50ms 窗口命中同一物品 → 物品弹回原位，双方在碰撞点 STUNNED 2 秒
-     * 2) 钩尖直接相撞：双方 STUNNED 2 秒，携带中的物品在当前点松脱落回矿洞
-     * STUNNED 期间不再重复触发（避免眩晕计时被刷新导致永远无法恢复）
+     * 2) 钩尖直接相撞：双方在碰撞点冻结 2 秒（携带物品随钩冻结），解冻时物品在碰撞点放下、双方空钩收回
+     * STUNNED 期间不再重复触发（避免眩晕计时被刷新导致永远无法恢复）；
+     * 相撞判定采用边沿检测：解冻收回途中钩尖尚未分离时不重复冻结，避免钩子永久卡死在碰撞点。
      */
     private void resolveHookConflict() {
         // 已眩晕或被冰冻的钩子运动暂停，不参与新的冲突判定（FR-07/FR-16）
@@ -380,23 +384,17 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
         }
 
         // === 钩尖直接相撞（双钩均已伸出矿洞时才判定，钟摆状态相距 640px 不可能相碰） ===
+        // 边沿检测：抛出/携带收回/空钩收回过程中一旦相撞，仅在进入相撞的瞬间冻结一次；
+        // 冻结 2 秒后解冻，双方钩尖仍在碰撞点附近，收回途中保持不重复冻结直至分离（否则无限冻结卡死）
         boolean extended1 = hookP1.getRopeLength() > 80;
         boolean extended2 = hookP2.getRopeLength() > 80;
-        if (extended1 && extended2 && hookP1.checkCollisionOtherHook(hookP2)) {
-            // 携带中的物品在当前碰撞点松脱，落回矿洞（保持可再抓取）
-            releaseCarriedAtCurrentPoint(hookP1);
-            releaseCarriedAtCurrentPoint(hookP2);
+        boolean nowColliding = extended1 && extended2 && hookP1.checkCollisionOtherHook(hookP2);
+        if (nowColliding && !hooksColliding) {
+            // 双方在碰撞点冻结 2 秒：携带物品随钩冻结，解冻时在碰撞点放下（HookImpl STUNNED 到期释放），空钩收回
             hookP1.stun();
             hookP2.stun();
         }
-    }
-
-    /** 眩晕时松开携带物品：物品留在钩尖当前坐标，恢复未抓取状态可被再次抓取 */
-    private void releaseCarriedAtCurrentPoint(Hook hook) {
-        Item carried = hook.getGrabbedItem();
-        if (carried != null) {
-            carried.setGrabbed(false);
-        }
+        hooksColliding = nowColliding;
     }
 
     /**
