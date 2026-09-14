@@ -162,25 +162,25 @@ public class LevelImpl implements Level {
 
     /**
      * 加权随机生成一种物品（FR-10 全 9 品类）：
-     * 小金块20 / 中金块15 / 大金块10 / 钻石8 / 石头22 / 炸弹8 / 福袋7 / 鼹鼠5 / 钻石猪5（百分比）。
-     * 低值矿石铺量、高值目标稀有，贴近原版手感。
+     * 小金块18 / 中金块14 / 大金块9 / 钻石7 / 石头20 / 炸弹7 / 福袋15 / 鼹鼠5 / 钻石猪5（百分比）。
+     * 低值矿石铺量、高值目标稀有，福袋概率提升以增加局内道具来源，贴近原版手感。
      */
     private Item createRandomItem(Random rnd, double x, double y) {
         int r = rnd.nextInt(100);
-        if (r < 20) {
-            return new Gold(x, y);           // <20
-        } else if (r < 35) {
-            return new MediumGold(x, y);     // 20~34
-        } else if (r < 45) {
-            return new BigGold(x, y);        // 35~44
-        } else if (r < 53) {
-            return new Diamond(x, y);        // 45~52
+        if (r < 18) {
+            return new Gold(x, y);           // <18
+        } else if (r < 32) {
+            return new MediumGold(x, y);     // 18~31
+        } else if (r < 41) {
+            return new BigGold(x, y);        // 32~40
+        } else if (r < 48) {
+            return new Diamond(x, y);        // 41~47
+        } else if (r < 68) {
+            return new Stone(x, y);          // 48~67
         } else if (r < 75) {
-            return new Stone(x, y);          // 53~74
-        } else if (r < 83) {
-            return new Bomb(x, y);           // 75~82
+            return new Bomb(x, y);           // 68~74
         } else if (r < 90) {
-            return new MysteryBag(x, y);     // 83~89
+            return new MysteryBag(x, y);     // 75~89
         } else if (r < 95) {
             return new Mole(x, y);           // 90~94
         } else {

@@ -51,8 +51,6 @@ public class GameViewImpl implements GameView {
     }
 
     private static final double GROUND_TOP = Config.HUD_HEIGHT;
-    /** 顶部地面条高度 */
-    private static final double GROUND_HEIGHT = 60;
 
     private final Canvas canvas;
 
@@ -99,11 +97,7 @@ public class GameViewImpl implements GameView {
             gc.fillRect(0, h - 60, w, 60);
         }
 
-        // 2. 顶部地面条（钩爪起点站立平台，HUD 下方）
-        gc.setFill(Color.rgb(139, 90, 43));
-        gc.fillRect(0, GROUND_TOP, w, GROUND_HEIGHT);
-
-        // 3. 矿洞数据（不绘制描边，让背景图完整显示；边界仅用于物品生成与碰撞）
+        // 2. 矿洞数据（不绘制描边，让背景图完整显示；边界仅用于物品生成与碰撞）
         MineMap mineMap = model.getMineMap();
 
         // 4. 所有物品（包括被钩住的——它们会跟着钩尖移动显示出来）

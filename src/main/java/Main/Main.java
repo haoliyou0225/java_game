@@ -11,6 +11,7 @@ import Main.controller.InputController;
 import Main.controller.InputControllerImpl;
 import Main.model.GameModel;
 import Main.model.GameState;
+import Main.view.CatchFeedbackPane;
 import Main.view.HUDView;
 import Main.view.HUDViewImpl;
 import Main.view.AudioManager;
@@ -300,6 +301,11 @@ public class Main extends Application {
         gamePane.getChildren().add(hudView.build());
         hudView.render(model); // 初始显示
 
+        // 钓获反馈 HUD：结算完成后在屏幕中线左右两侧显示本次钓到的物品信息
+        CatchFeedbackPane catchFeedbackPane = new CatchFeedbackPane();
+        gamePane.getChildren().add(catchFeedbackPane.build());
+        model.setOnCatchSettled(event -> catchFeedbackPane.showFeedback(event));
+
         // FR-18 输入分层装配：
         // GameManagerImpl 同时是 GameModel（状态/数据）与 GameActionHandler（动作权威处理），
         // InputController 只做 justPressed 防抖与派发，不直接改物理/库存/效果。
@@ -407,25 +413,25 @@ public class Main extends Application {
      * @return 映射结果；非游戏按键返回 null
      */
     private static KeyBinding mapKeyBinding(KeyCode code) {
-        return switch (code) {
-            // ===== 玩家1 =====
-            case S -> new KeyBinding(1, ActionType.THROW_HOOK);
-            case W -> new KeyBinding(1, ActionType.USE_DYNAMITE);
-            case A -> new KeyBinding(1, ActionType.USE_POWER_POTION);
-            case D -> new KeyBinding(1, ActionType.USE_FREEZE_BOX);
-            case F -> new KeyBinding(1, ActionType.USE_LUCKY_CLOVER);
-            case G -> new KeyBinding(1, ActionType.USE_DIAMOND_BOOST);
-            case H -> new KeyBinding(1, ActionType.USE_STONE_BOOK);
-            // ===== 玩家2（NUMPADn 为主，DIGITn 为无小键盘键盘的别名） =====
-            case DOWN -> new KeyBinding(2, ActionType.THROW_HOOK);
-            case UP -> new KeyBinding(2, ActionType.USE_DYNAMITE);
-            case NUMPAD1, DIGIT1 -> new KeyBinding(2, ActionType.USE_POWER_POTION);
-            case NUMPAD2, DIGIT2 -> new KeyBinding(2, ActionType.USE_FREEZE_BOX);
-            case NUMPAD3, DIGIT3 -> new KeyBinding(2, ActionType.USE_LUCKY_CLOVER);
-            case NUMPAD4, DIGIT4 -> new KeyBinding(2, ActionType.USE_DIAMOND_BOOST);
-            case NUMPAD5, DIGIT5 -> new KeyBinding(2, ActionType.USE_STONE_BOOK);
-            default -> null;
-        };
+        // 用 if-else 链替代 switch 表达式：规避 JDK javac 在 switch 表达式返回嵌套 record 类型时
+        // 误推断 default 分支栈类型为 Object 的 VerifyError（JDK-8303673）
+        // ===== 玩家1 =====
+        if (code == KeyCode.S) return new KeyBinding(1, ActionType.THROW_HOOK);
+        if (code == KeyCode.W) return new KeyBinding(1, ActionType.USE_DYNAMITE);
+        if (code == KeyCode.A) return new KeyBinding(1, ActionType.USE_POWER_POTION);
+        if (code == KeyCode.D) return new KeyBinding(1, ActionType.USE_FREEZE_BOX);
+        if (code == KeyCode.F) return new KeyBinding(1, ActionType.USE_LUCKY_CLOVER);
+        if (code == KeyCode.G) return new KeyBinding(1, ActionType.USE_DIAMOND_BOOST);
+        if (code == KeyCode.H) return new KeyBinding(1, ActionType.USE_STONE_BOOK);
+        // ===== 玩家2（NUMPADn 为主，DIGITn 为无小键盘键盘的别名） =====
+        if (code == KeyCode.DOWN) return new KeyBinding(2, ActionType.THROW_HOOK);
+        if (code == KeyCode.UP) return new KeyBinding(2, ActionType.USE_DYNAMITE);
+        if (code == KeyCode.NUMPAD1 || code == KeyCode.DIGIT1) return new KeyBinding(2, ActionType.USE_POWER_POTION);
+        if (code == KeyCode.NUMPAD2 || code == KeyCode.DIGIT2) return new KeyBinding(2, ActionType.USE_FREEZE_BOX);
+        if (code == KeyCode.NUMPAD3 || code == KeyCode.DIGIT3) return new KeyBinding(2, ActionType.USE_LUCKY_CLOVER);
+        if (code == KeyCode.NUMPAD4 || code == KeyCode.DIGIT4) return new KeyBinding(2, ActionType.USE_DIAMOND_BOOST);
+        if (code == KeyCode.NUMPAD5 || code == KeyCode.DIGIT5) return new KeyBinding(2, ActionType.USE_STONE_BOOK);
+        return null;
     }
 
     /**

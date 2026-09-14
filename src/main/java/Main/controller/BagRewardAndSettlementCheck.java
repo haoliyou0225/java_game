@@ -1,5 +1,5 @@
 // FR-14/FR-15/FR-17/FR-18 福袋与结算验收自检：
-// 加权抽奖 35%金币/35%炸药/20%短时道具/10%持续道具；
+// 加权抽奖 炸药20%/其他5种道具各16%（不再开出金币）；
 // 结算链 基础价值→石头×3→钻石×2→幸运草×1.5→四舍五入；
 // 库存上限（炸药3/短时道具5/持续单激活位）溢出转 50 金币，持续道具重复获得转 50 金币。
 // 与 GameManagerImpl 同包以访问包级静态方法；直接 java Main.controller.BagRewardAndSettlementCheck 运行。
@@ -21,7 +21,7 @@ public class BagRewardAndSettlementCheck extends SelfCheck {
 
     public static void main(String[] args) {
         BagRewardAndSettlementCheck check = new BagRewardAndSettlementCheck();
-        check.rollBagExtraRewardMatches35_35_20_10Weights();
+        check.rollBagExtraRewardMatches20_16_16_16_16_16Weights();
         check.stoneBookTriplesStone();
         check.diamondBoostDoublesDiamond();
         check.luckyCloverMultipliesByOnePointFiveAndRounds();
@@ -37,9 +37,9 @@ public class BagRewardAndSettlementCheck extends SelfCheck {
         check.finish();
     }
 
-    // ===== FR-14 加权抽奖权重 =====
+    // ===== FR-14 加权抽奖权重（炸药 20% / 其他 5 种各 16%，不再有金币档） =====
 
-    private void rollBagExtraRewardMatches35_35_20_10Weights() {
+    private void rollBagExtraRewardMatches20_16_16_16_16_16Weights() {
         Random rnd = new Random(20260911L);
         int trials = 100000;
         Map<GameConfig.MysteryReward, Integer> counts =
@@ -49,18 +49,27 @@ public class BagRewardAndSettlementCheck extends SelfCheck {
             counts.merge(r, 1, Integer::sum);
         }
 
+        // 金币档不再开出，概率应为 0
         double goldPct = pct(counts, GameConfig.MysteryReward.MYSTERY_GOLD, trials);
-        double dynamitePct = pct(counts, GameConfig.MysteryReward.DYNAMITE, trials);
-        double shortPct = pct(counts, GameConfig.MysteryReward.POWER_POTION, trials)
-                + pct(counts, GameConfig.MysteryReward.FREEZE_BOX, trials);
-        double persistPct = pct(counts, GameConfig.MysteryReward.LUCKY_CLOVER, trials)
-                + pct(counts, GameConfig.MysteryReward.DIAMOND_BOOST, trials)
-                + pct(counts, GameConfig.MysteryReward.STONE_BOOK, trials);
+        checkTrue(goldPct < 0.5, "金币档已移除，概率应≈0，实际 " + goldPct);
 
-        checkTrue(Math.abs(goldPct - 35) < 3, "金币档应约 35%，实际 " + goldPct);
-        checkTrue(Math.abs(dynamitePct - 35) < 3, "炸药档应约 35%，实际 " + dynamitePct);
-        checkTrue(Math.abs(shortPct - 20) < 3, "短时道具档应约 20%，实际 " + shortPct);
-        checkTrue(Math.abs(persistPct - 10) < 3, "持续道具档应约 10%，实际 " + persistPct);
+        double dynamitePct = pct(counts, GameConfig.MysteryReward.DYNAMITE, trials);
+        checkTrue(Math.abs(dynamitePct - 20) < 3, "炸药档应约 20%，实际 " + dynamitePct);
+
+        double powerPct = pct(counts, GameConfig.MysteryReward.POWER_POTION, trials);
+        checkTrue(Math.abs(powerPct - 16) < 3, "强力药水应约 16%，实际 " + powerPct);
+
+        double freezePct = pct(counts, GameConfig.MysteryReward.FREEZE_BOX, trials);
+        checkTrue(Math.abs(freezePct - 16) < 3, "冰冻箱应约 16%，实际 " + freezePct);
+
+        double cloverPct = pct(counts, GameConfig.MysteryReward.LUCKY_CLOVER, trials);
+        checkTrue(Math.abs(cloverPct - 16) < 3, "幸运草应约 16%，实际 " + cloverPct);
+
+        double diamondPct = pct(counts, GameConfig.MysteryReward.DIAMOND_BOOST, trials);
+        checkTrue(Math.abs(diamondPct - 16) < 3, "钻石升级应约 16%，实际 " + diamondPct);
+
+        double stonePct = pct(counts, GameConfig.MysteryReward.STONE_BOOK, trials);
+        checkTrue(Math.abs(stonePct - 16) < 3, "石头书应约 16%，实际 " + stonePct);
     }
 
     private double pct(Map<GameConfig.MysteryReward, Integer> counts,

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * UI 层对局模型实现。
@@ -191,6 +192,14 @@ public class GameModelImpl implements GameModel {
      */
     @Override
     public void setOnGameEnd(Runnable action) {
+        // no-op：GameManagerImpl 才是 Main.java 实际装配的模型
+    }
+
+    /**
+     * 钓获反馈回调：本类已被 GameManagerImpl 取代，仅空实现以维持接口编译。
+     */
+    @Override
+    public void setOnCatchSettled(Consumer<CatchFeedbackEvent> listener) {
         // no-op：GameManagerImpl 才是 Main.java 实际装配的模型
     }
 }

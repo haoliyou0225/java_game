@@ -112,7 +112,7 @@ public final class GameConfig {
     /** 石头收藏书激活时石头价值倍率（FR-17：石头×3） */
     public static final int STONE_BOOK_MULTIPLIER = 3;
 
-    // ===== 福袋额外奖励（FR-14：35% 金币 / 35% 炸药 / 20% 短时道具 / 10% 持续道具） =====
+    // ===== 福袋额外奖励（炸药 20% / 其他 5 种道具各 16%，不再开出金币） =====
     /** 炸药满 3、短时道具满 5、持续道具已激活时，再次获得自动转为金币（FR-15/FR-18） */
     public static final int ITEM_DUP_AUTO_GOLD = 50;
     /** 幸运草效果：本局物品基础收益倍率（+50%，FR-17/FR-18） */
@@ -123,14 +123,18 @@ public final class GameConfig {
     public static final double POWER_POTION_SPEED_MULTIPLIER = 2.0;
     /** 强力药水效果持续时长（秒，FR-16：10 秒） */
     public static final int POWER_POTION_DURATION_SEC = 10;
-    /** 福袋加权抽奖：金币权重（FR-14：35%） */
-    public static final int BAG_WEIGHT_GOLD = 35;
-    /** 福袋加权抽奖：炸药权重（FR-14：35%） */
-    public static final int BAG_WEIGHT_DYNAMITE = 35;
-    /** 福袋加权抽奖：短时道具权重（FR-14：20%，强力药水/冰冻箱等概率） */
-    public static final int BAG_WEIGHT_SHORT_ITEM = 20;
-    /** 福袋加权抽奖：持续道具权重（FR-14：10%，幸运草/钻石药/石头书等概率） */
-    public static final int BAG_WEIGHT_PERSIST = 10;
+    /** 福袋加权抽奖：炸药权重（20%） */
+    public static final int BAG_WEIGHT_DYNAMITE = 20;
+    /** 福袋加权抽奖：强力药水权重（16%） */
+    public static final int BAG_WEIGHT_POWER_POTION = 16;
+    /** 福袋加权抽奖：冰冻箱权重（16%） */
+    public static final int BAG_WEIGHT_FREEZE_BOX = 16;
+    /** 福袋加权抽奖：幸运草权重（16%） */
+    public static final int BAG_WEIGHT_LUCKY_CLOVER = 16;
+    /** 福袋加权抽奖：钻石升级权重（16%） */
+    public static final int BAG_WEIGHT_DIAMOND_BOOST = 16;
+    /** 福袋加权抽奖：石头书权重（16%） */
+    public static final int BAG_WEIGHT_STONE_BOOK = 16;
 
     // ===== FR-11 钻石猪 =====
     /** 钻石猪携带钻石颗数下限（FR-01：生成时预计算 2~5 颗） */

@@ -19,12 +19,8 @@ import javafx.scene.layout.VBox;
 
 /**
  * HUD 视图实现（FR-29 + FR-30 + FR-22）。
- * 顶部三栏布局：左侧玩家1分数与道具状态 | 中间剩余时间 | 右侧玩家2分数与道具状态。
- * 道具状态分两行（6 种道具全部可见，名称与新手指南/按键表完全一致）：
- * <ul>
- *   <li>第一行：冰冻倒计时（若有）/ 炸药 / 强力药水（生效中带剩余秒）/ 冰冻箱；</li>
- *   <li>第二行：幸运草 / 钻石升级 / 石头书（显示库存，已激活带 ✓ 标记）。</li>
- * </ul>
+ * 顶部三栏布局：左侧玩家1分数与已获得道具图标+数量 | 中间剩余时间 | 右侧玩家2分数与已获得道具图标+数量。
+ * 道具图标行只显示当前库存 > 0 的道具（图标 ×数量），未获得或用完的不显示。
  */
 public class HUDViewImpl implements HUDView {
 
@@ -33,14 +29,10 @@ public class HUDViewImpl implements HUDView {
     /** 玩家2分数标签 */
     private final Label p2ScoreLabel;
 
-    /** 玩家1道具第一行（炸药/强力药水/冰冻箱/冰冻中） */
-    private final Label p1ItemLine1;
-    /** 玩家1道具第二行（幸运草/钻石升级/石头书） */
-    private final Label p1ItemLine2;
-    /** 玩家2道具第一行 */
-    private final Label p2ItemLine1;
-    /** 玩家2道具第二行 */
-    private final Label p2ItemLine2;
+    /** 玩家1道具图标行（动态装填图标×数量胶囊） */
+    private final HBox p1ItemBox;
+    /** 玩家2道具图标行 */
+    private final HBox p2ItemBox;
 
     /** 倒计时数字标签 */
     private final Label timeLabel;
@@ -62,6 +54,22 @@ public class HUDViewImpl implements HUDView {
     private static final double MINER_SIZE = 80;
     private static final double MINER_FOOT_RATIO = 45.5 / 126.0;
 
+    /** 道具图标缓存（路径→Image，classpath 加载一次） */
+    private static final Image ICON_DYNAMITE   = loadIcon("/images/HUD/炸药.png");
+    private static final Image ICON_POWER       = loadIcon("/images/HUD/强力药水.png");
+    private static final Image ICON_FREEZE      = loadIcon("/images/HUD/冰冻箱.png");
+    private static final Image ICON_CLOVER      = loadIcon("/images/HUD/幸运草.png");
+    private static final Image ICON_DIAMOND_B   = loadIcon("/images/HUD/钻石升级.png");
+    private static final Image ICON_STONE_BOOK  = loadIcon("/images/HUD/石头收藏书.png");
+
+    private static Image loadIcon(String path) {
+        try {
+            return new Image(HUDViewImpl.class.getResourceAsStream(path));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private static Image loadMinerImage(String path) {
         try {
             return new Image(HUDViewImpl.class.getResourceAsStream(path));
@@ -74,23 +82,19 @@ public class HUDViewImpl implements HUDView {
         root = new Pane();
         root.setPickOnBounds(false); // 不拦截鼠标事件
 
-        // ---------- 左栏：玩家1分数 + 道具两行 ----------
-        Label p1Title = new Label("P1");
-        p1Title.setStyle("-fx-font-size: 16px; -fx-text-fill: #8ec9ff;");
-
+        // ---------- 左栏：玩家1分数 + 道具图标行 ----------
         p1ScoreLabel = new Label("P1: $0");
         p1ScoreLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; "
                 + "-fx-text-fill: #5db0ff;");
 
-        p1ItemLine1 = new Label("");
-        p1ItemLine1.setStyle("-fx-font-size: 12px; -fx-text-fill: #9fd0ff;");
-        p1ItemLine2 = new Label("");
-        p1ItemLine2.setStyle("-fx-font-size: 12px; -fx-text-fill: #9fd0ff;");
+        p1ItemBox = new HBox(8);
+        p1ItemBox.setAlignment(Pos.CENTER_LEFT);
+        p1ItemBox.setPrefHeight(32);
 
-        VBox p1Box = new VBox(0, p1Title, p1ScoreLabel, p1ItemLine1, p1ItemLine2);
-        p1Box.setAlignment(Pos.CENTER_LEFT);
+        VBox p1Box = new VBox(2, p1ScoreLabel, p1ItemBox);
+        p1Box.setAlignment(Pos.TOP_LEFT);
         p1Box.setPrefWidth(Config.WIDTH / 3.0);
-        p1Box.setPadding(new Insets(0, 0, 0, 36));
+        p1Box.setPadding(new Insets(6, 0, 0, 36));
 
         // ---------- 中栏：剩余时间 ----------
         Label timeTitle = new Label("剩余时间");
@@ -104,23 +108,19 @@ public class HUDViewImpl implements HUDView {
         timeBox.setAlignment(Pos.CENTER);
         timeBox.setPrefWidth(Config.WIDTH / 3.0);
 
-        // ---------- 右栏：玩家2分数 + 道具两行 ----------
-        Label p2Title = new Label("P2");
-        p2Title.setStyle("-fx-font-size: 16px; -fx-text-fill: #ff9d9d;");
-
+        // ---------- 右栏：玩家2分数 + 道具图标行 ----------
         p2ScoreLabel = new Label("P2: $0");
         p2ScoreLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; "
                 + "-fx-text-fill: #ff6b6b;");
 
-        p2ItemLine1 = new Label("");
-        p2ItemLine1.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffb3b3;");
-        p2ItemLine2 = new Label("");
-        p2ItemLine2.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffb3b3;");
+        p2ItemBox = new HBox(8);
+        p2ItemBox.setAlignment(Pos.CENTER_RIGHT);
+        p2ItemBox.setPrefHeight(32);
 
-        VBox p2Box = new VBox(0, p2Title, p2ScoreLabel, p2ItemLine1, p2ItemLine2);
-        p2Box.setAlignment(Pos.CENTER_RIGHT);
+        VBox p2Box = new VBox(2, p2ScoreLabel, p2ItemBox);
+        p2Box.setAlignment(Pos.TOP_RIGHT);
         p2Box.setPrefWidth(Config.WIDTH / 3.0);
-        p2Box.setPadding(new Insets(0, 36, 0, 0));
+        p2Box.setPadding(new Insets(6, 36, 0, 0));
 
         // ---------- 组装三栏 HUD ----------
         HBox hudBar = new HBox(p1Box, timeBox, p2Box);
@@ -177,11 +177,9 @@ public class HUDViewImpl implements HUDView {
         // 玩家2分数（FR-29：独立显示，不混淆）
         p2ScoreLabel.setText("P2: $" + model.getPlayer2().getScore());
 
-        // FR-22：双方独立显示全部 6 种道具的库存/激活/剩余状态
-        p1ItemLine1.setText(buildShortItemLine(model.getPlayer1(), model.getHook1()));
-        p1ItemLine2.setText(buildPersistItemLine(model.getPlayer1()));
-        p2ItemLine1.setText(buildShortItemLine(model.getPlayer2(), model.getHook2()));
-        p2ItemLine2.setText(buildPersistItemLine(model.getPlayer2()));
+        // FR-22：只显示当前库存 > 0 的道具（图标×数量），未获得或用完的不显示
+        fillItemBox(p1ItemBox, model.getPlayer1(), model.getHook1());
+        fillItemBox(p2ItemBox, model.getPlayer2(), model.getHook2());
 
         // 矿工摇绳动画：收回（空钩/携带）时两帧交替，其他状态停在第一帧
         updateMiner(miner1, model.getHook1());
@@ -210,28 +208,64 @@ public class HUDViewImpl implements HUDView {
     }
 
     /**
-     * 第一行：冰冻状态（被冻时优先提示）→ 炸药 → 强力药水（生效中附剩余秒）→ 冰冻箱。
+     * 填充道具图标行：只显示库存 > 0 的道具（图标 ×数量）。
+     * 炸药/冰冻箱/幸运草/钻石升级/石头书按库存数量显示；
+     * 强力药水按生效中显示（剩余秒），未生效不显示。
+     * 冰冻中状态优先显示冰冻箱图标 + 剩余秒。
      */
-    private String buildShortItemLine(Player player, Hook hook) {
-        StringBuilder sb = new StringBuilder();
+    private void fillItemBox(HBox box, Player player, Hook hook) {
+        box.getChildren().clear();
+
+        // 冰冻中提示（若被冻，优先显示带剩余秒的冰冻箱图标）
         if (hook != null && hook.isFrozen()) {
-            sb.append("冰冻中").append((int) Math.ceil(hook.getFreezeRemaining())).append("s  ");
+            box.getChildren().add(makeCapsule(ICON_FREEZE,
+                    (int) Math.ceil(hook.getFreezeRemaining()) + "s", "#9fd0ff"));
         }
-        sb.append("炸药×").append(player.getDynamiteCount());
-        sb.append("  强力药水×").append(player.getPowerPotionCount());
+
+        if (player.getDynamiteCount() > 0) {
+            box.getChildren().add(makeCapsule(ICON_DYNAMITE,
+                    "×" + player.getDynamiteCount(), "#e8821e"));
+        }
         if (hook != null && hook.isSpeedBoostActive()) {
-            sb.append("(").append((int) Math.ceil(hook.getSpeedBoostRemaining())).append("s)");
+            box.getChildren().add(makeCapsule(ICON_POWER,
+                    (int) Math.ceil(hook.getSpeedBoostRemaining()) + "s", "#ff9d9d"));
+        } else if (player.getPowerPotionCount() > 0) {
+            box.getChildren().add(makeCapsule(ICON_POWER,
+                    "×" + player.getPowerPotionCount(), "#ffb3b3"));
         }
-        sb.append("  冰冻箱×").append(player.getFreezeBoxCount());
-        return sb.toString();
+        if (player.getFreezeBoxCount() > 0 && !(hook != null && hook.isFrozen())) {
+            box.getChildren().add(makeCapsule(ICON_FREEZE,
+                    "×" + player.getFreezeBoxCount(), "#9fd0ff"));
+        }
+        if (player.getLuckyCloverCount() > 0) {
+            box.getChildren().add(makeCapsule(ICON_CLOVER,
+                    "×" + player.getLuckyCloverCount(), "#9be3a0"));
+        }
+        if (player.getDiamondBoostCount() > 0) {
+            box.getChildren().add(makeCapsule(ICON_DIAMOND_B,
+                    "×" + player.getDiamondBoostCount(), "#9fd0ff"));
+        }
+        if (player.getStoneBookCount() > 0) {
+            box.getChildren().add(makeCapsule(ICON_STONE_BOOK,
+                    "×" + player.getStoneBookCount(), "#d0c8a0"));
+        }
     }
 
-    /**
-     * 第二行：幸运草 / 钻石升级 / 石头书的库存数量；已激活的持续道具追加 ✓ 标记（FR-22）。
-     */
-    private String buildPersistItemLine(Player player) {
-        return "幸运草×" + player.getLuckyCloverCount() + (player.hasLuckyClover() ? "✓" : "")
-                + "  钻石升级×" + player.getDiamondBoostCount() + (player.hasDiamondBoost() ? "✓" : "")
-                + "  石头书×" + player.getStoneBookCount() + (player.hasStoneBook() ? "✓" : "");
+    /** 构造一个 图标 + ×数量 的小胶囊节点（HBox 包 ImageView + Label），仅当数量≥1 时由调用方加入 */
+    private HBox makeCapsule(Image icon, String countText, String color) {
+        Label count = new Label(countText);
+        count.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
+        count.setMinWidth(20);
+        HBox capsule = new HBox(2);
+        capsule.setAlignment(Pos.CENTER_LEFT);
+        if (icon != null && !icon.isError()) {
+            ImageView iv = new ImageView(icon);
+            iv.setFitWidth(28);
+            iv.setFitHeight(28);
+            iv.setPreserveRatio(true);
+            capsule.getChildren().add(iv);
+        }
+        capsule.getChildren().add(count);
+        return capsule;
     }
 }

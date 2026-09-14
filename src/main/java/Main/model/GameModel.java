@@ -1,6 +1,8 @@
 // FR-UI GameModel：UI 对局模型接口（双方玩家/倒计时/状态/双钩/矿洞/模拟收回），来自 feature_ui 分支
 package Main.model;
 
+import java.util.function.Consumer;
+
 public interface GameModel {
 
     Player getPlayer1();
@@ -78,4 +80,14 @@ public interface GameModel {
      * 装配层（Main）在回调里停止倒计时与物理帧并进入结算流程。
      */
     void setOnGameEnd(Runnable action);
+
+    /**
+     * 注册本次钓获反馈回调：物品被成功拉回并完成结算后触发，
+     * 装配层（Main）在回调里驱动 CatchFeedbackPane 显示本次钓到的物品信息
+     * （图标 + 名称 + 数量/效果 + 加分）。
+     * 空钩、未拉回、中途失败、未结算时不触发。
+     *
+     * @param listener 回调；传 null 可清除
+     */
+    void setOnCatchSettled(Consumer<CatchFeedbackEvent> listener);
 }

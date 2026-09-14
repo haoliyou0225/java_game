@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * 游戏管理器实现（严格对齐 UML）+ GameModel / GameActionHandler 接口（融合版）
@@ -50,6 +51,9 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
 
     /** FR-08 对局提前结束回调（物品清空且双钩均 SWINGING 时触发） */
     private Runnable onGameEnd;
+
+    /** 钓获反馈回调（物品被成功拉回并完成结算后触发，传递给视图层显示） */
+    private Consumer<CatchFeedbackEvent> onCatchSettled;
 
     public GameManagerImpl() {
         // hook 原版初始化
@@ -132,17 +136,12 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
 
                     int finalScore;
                     GameConfig.MysteryReward reward = null;
+                    int extraGold = 0;
                     if (item instanceof MysteryBag) {
-                        // FR-14：福袋带回起点立即结算
-                        // ① 先发放生成时预计算的 100~800 金币（基础收益，幸运草可加成）
-                        int baseGold = item.getScore();
-                        int baseAfterClover = grabber.hasLuckyClover()
-                                ? (int) Math.round(baseGold * GameConfig.LUCKY_CLOVER_BONUS_RATE)
-                                : baseGold;
-                        // ② 再按 35/35/20/10 加权抽取额外奖励，道具自动入库存，奖励附带金币
+                        // 福袋仅开出道具，不获得金币（基础金币、溢出转化金币均不发放）
                         reward = rollBagExtraReward(ThreadLocalRandom.current());
-                        int extraGold = grantBagExtra(reward, grabber, ThreadLocalRandom.current());
-                        finalScore = baseAfterClover + extraGold;
+                        grantBagExtra(reward, grabber, ThreadLocalRandom.current());
+                        finalScore = 0;
                     } else {
                         // FR-17：基础价值 → 石头×3 → 钻石×2 → 幸运草×1.5 → 四舍五入
                         finalScore = settleNormalItem(item, grabber);
@@ -157,11 +156,18 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
                     if (owner instanceof HookImpl) {
                         HookImpl hookOwner = (HookImpl) owner;
                         if (item instanceof MysteryBag && reward != null) {
-                            hookOwner.setSettleLabel("+" + finalScore + " " + reward.cnName(),
-                                    reward, 2000);
+                            // 福袋只显示开出的道具名，不显示金币
+                            hookOwner.setSettleLabel(reward.cnName(), reward, 2000);
                         } else {
                             hookOwner.setSettleLabel((finalScore >= 0 ? "+" : "") + finalScore, 2000);
                         }
+                    }
+
+                    // 钓获反馈 HUD：仅在成功拉回并完成结算后触发
+                    // 空钩/未拉回/中途失败/未结算时不进入此分支，不会触发回调
+                    if (onCatchSettled != null) {
+                        onCatchSettled.accept(new CatchFeedbackEvent(
+                                owner.getPlayerId(), item, finalScore, reward, extraGold));
                     }
                 }
             }
@@ -394,28 +400,34 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
     }
 
     /**
-     * FR-14 福袋额外奖励加权抽奖：35% 金币 / 35% 炸药 / 20% 短时道具 / 10% 持续道具。
+     * 福袋额外奖励加权抽奖：炸药 20% / 强力药水 16% / 冰冻箱 16% /
+     * 幸运草 16% / 钻石升级 16% / 石头书 16%。不再开出金币。
      * 包级静态以便单元测试直接验证权重分布。
      */
     static GameConfig.MysteryReward rollBagExtraReward(Random rnd) {
         int roll = rnd.nextInt(100);
-        if (roll < GameConfig.BAG_WEIGHT_GOLD) {
-            return GameConfig.MysteryReward.MYSTERY_GOLD;
-        } else if (roll < GameConfig.BAG_WEIGHT_GOLD + GameConfig.BAG_WEIGHT_DYNAMITE) {
+        if (roll < GameConfig.BAG_WEIGHT_DYNAMITE) {
+            // 0~19：炸药 20%
             return GameConfig.MysteryReward.DYNAMITE;
-        } else if (roll < GameConfig.BAG_WEIGHT_GOLD + GameConfig.BAG_WEIGHT_DYNAMITE
-                + GameConfig.BAG_WEIGHT_SHORT_ITEM) {
-            // 20% 短时道具：强力药水 / 冰冻箱等概率
-            return rnd.nextBoolean()
-                    ? GameConfig.MysteryReward.POWER_POTION
-                    : GameConfig.MysteryReward.FREEZE_BOX;
+        } else if (roll < GameConfig.BAG_WEIGHT_DYNAMITE + GameConfig.BAG_WEIGHT_POWER_POTION) {
+            // 20~35：强力药水 16%
+            return GameConfig.MysteryReward.POWER_POTION;
+        } else if (roll < GameConfig.BAG_WEIGHT_DYNAMITE + GameConfig.BAG_WEIGHT_POWER_POTION
+                + GameConfig.BAG_WEIGHT_FREEZE_BOX) {
+            // 36~51：冰冻箱 16%
+            return GameConfig.MysteryReward.FREEZE_BOX;
+        } else if (roll < GameConfig.BAG_WEIGHT_DYNAMITE + GameConfig.BAG_WEIGHT_POWER_POTION
+                + GameConfig.BAG_WEIGHT_FREEZE_BOX + GameConfig.BAG_WEIGHT_LUCKY_CLOVER) {
+            // 52~67：幸运草 16%
+            return GameConfig.MysteryReward.LUCKY_CLOVER;
+        } else if (roll < GameConfig.BAG_WEIGHT_DYNAMITE + GameConfig.BAG_WEIGHT_POWER_POTION
+                + GameConfig.BAG_WEIGHT_FREEZE_BOX + GameConfig.BAG_WEIGHT_LUCKY_CLOVER
+                + GameConfig.BAG_WEIGHT_DIAMOND_BOOST) {
+            // 68~83：钻石升级 16%
+            return GameConfig.MysteryReward.DIAMOND_BOOST;
         } else {
-            // 10% 持续道具：幸运草 / 钻石药水 / 石头书等概率
-            switch (rnd.nextInt(3)) {
-                case 0: return GameConfig.MysteryReward.LUCKY_CLOVER;
-                case 1: return GameConfig.MysteryReward.DIAMOND_BOOST;
-                default: return GameConfig.MysteryReward.STONE_BOOK;
-            }
+            // 84~99：石头书 16%
+            return GameConfig.MysteryReward.STONE_BOOK;
         }
     }
 
@@ -550,5 +562,11 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
     @Override
     public void setOnGameEnd(Runnable action) {
         this.onGameEnd = action;
+    }
+
+    /** 注册钓获反馈回调（物品被成功拉回并完成结算后触发） */
+    @Override
+    public void setOnCatchSettled(Consumer<CatchFeedbackEvent> listener) {
+        this.onCatchSettled = listener;
     }
 }
