@@ -7,8 +7,8 @@ import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * 游戏音频统一管理器（单例）。
@@ -29,11 +29,14 @@ public final class AudioManager {
     /** 全局唯一实例 */
     private static final AudioManager INSTANCE = new AudioManager();
 
+    /** 已知音效名（与 resources/music 下的 .mp3 文件同名，无扩展名） */
+    private static final String[] KNOWN_SFX = {"Select", "largegold", "bomb", "finish"};
+
     /** 背景音乐播放器（null 表示未加载成功） */
     private MediaPlayer musicPlayer;
 
-    /** 音效缓存：文件名（无扩展名） → 已加载的 AudioClip */
-    private final Map<String, AudioClip> sfxClips = new HashMap<>();
+    /** 音效缓存：文件名（无扩展名） → 已加载的 AudioClip（线程安全，支持后台预加载） */
+    private final ConcurrentMap<String, AudioClip> sfxClips = new ConcurrentHashMap<>();
 
     private AudioManager() {
         // 单例禁止外部实例化
@@ -64,6 +67,28 @@ public final class AudioManager {
         } catch (Exception ignored) {
             musicPlayer = null; // 加载失败后允许下次重试
         }
+        // 后台预加载所有已知音效，避免首次播放时在 JavaFX Application Thread 同步加载造成卡顿
+        preloadSfx();
+    }
+
+    /** 后台线程预加载全部已知音效（每个只加载一次，失败不缓存允许下次重试） */
+    private void preloadSfx() {
+        Thread t = new Thread(() -> {
+            for (String name : KNOWN_SFX) {
+                try {
+                    if (sfxClips.get(name) == null) {
+                        AudioClip clip = loadClip(name);
+                        if (clip != null) {
+                            sfxClips.putIfAbsent(name, clip);
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // 单个音效加载失败不影响其他音效
+                }
+            }
+        }, "audio-preload");
+        t.setDaemon(true);
+        t.start();
     }
 
     /**
@@ -98,7 +123,17 @@ public final class AudioManager {
         if (GameSettings.getSfxVolume() <= 0) {
             return;
         }
-        AudioClip clip = sfxClips.computeIfAbsent(name, this::loadClip);
+        // ConcurrentHashMap 不允许 null 值，故手动 get-load-put（保留加载失败不缓存、下次重试的语义）
+        AudioClip clip = sfxClips.get(name);
+        if (clip == null) {
+            clip = loadClip(name);
+            if (clip != null) {
+                AudioClip prev = sfxClips.putIfAbsent(name, clip);
+                if (prev != null) {
+                    clip = prev;
+                }
+            }
+        }
         if (clip != null) {
             clip.play();
         }

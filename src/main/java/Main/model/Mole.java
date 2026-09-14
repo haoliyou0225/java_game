@@ -6,8 +6,6 @@ import Main.config.Config;
 import Main.config.GameConfig;
 
 public class Mole extends ItemImpl {
-    /** 帧步长（秒），按 ~60fps 推进 */
-    private static final double FRAME_STEP = 0.016;
     /** 爬行速度（像素/秒），短促快速爬动 */
     private static final double CRAWL_SPEED = 75;
     /** 一次爬行持续时间下限（秒） */
@@ -64,16 +62,18 @@ public class Mole extends ItemImpl {
     /**
      * FR-13 每帧推进：未被抓取时在矿洞内匍匐爬行——
      * 爬行段快速移动并摆动四肢，停顿段原地不动；每段爬行开始有概率换向，撞边必然反弹。
+     *
+     * @param deltaTime 距上一帧的秒数（game-manager 帧率无关改造，由 GameManager 传入真实帧间隔）
      */
     @Override
-    public void updatePosition() {
+    public void updatePosition(double deltaTime) {
         if (isGrabbed()) {
             return;
         }
 
         if (state == CrawlState.CRAWL) {
-            x += dir * CRAWL_SPEED * FRAME_STEP;
-            legPhase += LEG_ANGULAR_SPEED * FRAME_STEP;
+            x += dir * CRAWL_SPEED * deltaTime;
+            legPhase += LEG_ANGULAR_SPEED * deltaTime;
 
             // 撞边必然反弹并立即继续爬
             if (x < minX) {
@@ -88,7 +88,7 @@ public class Mole extends ItemImpl {
         }
 
         // 爬行/停顿状态切换
-        stateIn -= FRAME_STEP;
+        stateIn -= deltaTime;
         if (stateIn <= 0) {
             if (state == CrawlState.CRAWL) {
                 // 爬完一段 -> 短暂停顿；相位吸附到步伐中立点（双脚居中、伏身），避免停顿瞬间腿突变

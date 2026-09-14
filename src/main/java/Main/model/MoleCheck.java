@@ -32,7 +32,7 @@ public class MoleCheck extends SelfCheck {
         // 推进约 160 秒（10000 帧），全程被限制在矿洞内部
         for (int frame = 0; frame < 10000; frame++) {
             double before = mole.getX();
-            mole.updatePosition();
+            mole.updatePosition(0.016);
             moved |= Math.abs(mole.getX() - before) > 1e-9;
 
             checkTrue(mole.getX() >= GameConfig.MINE_MIN_X - 1e-9,
@@ -49,7 +49,7 @@ public class MoleCheck extends SelfCheck {
         mole.setGrabbed(true);
         double x = mole.getX();
         for (int i = 0; i < 300; i++) {
-            mole.updatePosition();
+            mole.updatePosition(0.016);
         }
         checkEq(x, mole.getX(), 1e-9, "被钩爪携带后鼹鼠应停止移动");
     }

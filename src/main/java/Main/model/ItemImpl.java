@@ -20,7 +20,7 @@ public abstract class ItemImpl implements Item {
     public abstract void onGrab(Hook hook);
 
     @Override
-    public abstract void updatePosition();
+    public abstract void updatePosition(double deltaTime);
 
     @Override public double getX() { return x; }
     @Override public double getY() { return y; }

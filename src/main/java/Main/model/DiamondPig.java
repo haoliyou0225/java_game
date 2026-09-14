@@ -9,9 +9,6 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class DiamondPig extends ItemImpl {
 
-    /** 帧步长（秒），与 Mole 一致按 ~60fps 推进 */
-    private static final double FRAME_STEP = 0.016;
-
     /** 一次爬行持续时间下限（秒），猪比鼹鼠节奏更稳重 */
     private static final double CRAWL_MIN = 0.55;
     /** 一次爬行持续时间上限（秒） */
@@ -82,16 +79,16 @@ public class DiamondPig extends ItemImpl {
      * 每 2~4 秒触发一次 0.5 秒加速（速度×1.5，步频同比加快）；被抓取后停止移动。
      */
     @Override
-    public void updatePosition() {
+    public void updatePosition(double deltaTime) {
         if (isGrabbed()) {
             // 被钩走：姿态平滑回落到伏身静止（不影响世界坐标，钩子负责位移）
-            approachBlend(0.0);
+            approachBlend(0.0, deltaTime);
             return;
         }
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
 
         // 定时冲刺计时；触发时若正在停顿则立即开爬（突然加速逃跑）
-        nextDashIn -= FRAME_STEP;
+        nextDashIn -= deltaTime;
         if (nextDashIn <= 0) {
             dashTimer = GameConfig.PIG_DASH_DURATION_SEC;
             scheduleNextDash(rnd);
@@ -102,15 +99,15 @@ public class DiamondPig extends ItemImpl {
         double speed = GameConfig.PIG_MOVE_SPEED
                 * (dashTimer > 0 ? GameConfig.PIG_DASH_MULTIPLIER : 1.0);
         if (dashTimer > 0) {
-            dashTimer -= FRAME_STEP;
+            dashTimer -= deltaTime;
         }
 
         // ===== 根运动：世界坐标只在爬行段按速度积分 =====
         boolean moving = state == CrawlState.CRAWL;
         if (moving) {
-            x += dir * speed * FRAME_STEP;
+            x += dir * speed * deltaTime;
             // 步态相位与位移匹配：每前进一个步幅相位走 π
-            legPhase += Math.PI * speed / STRIDE * FRAME_STEP;
+            legPhase += Math.PI * speed / STRIDE * deltaTime;
 
             // 撞边必然反弹并续上一段爬行
             if (x < minX) {
@@ -125,7 +122,7 @@ public class DiamondPig extends ItemImpl {
         }
 
         // ===== 爬行/停顿状态切换（不改变坐标） =====
-        stateIn -= FRAME_STEP;
+        stateIn -= deltaTime;
         if (stateIn <= 0) {
             if (moving) {
                 if (dashTimer > 0) {
@@ -144,7 +141,7 @@ public class DiamondPig extends ItemImpl {
         }
 
         // ===== 渲染姿态混合量平滑（纯表现层） =====
-        approachBlend(moving ? 1.0 : 0.0);
+        approachBlend(moving ? 1.0 : 0.0, deltaTime);
     }
 
     /**
@@ -221,8 +218,8 @@ public class DiamondPig extends ItemImpl {
     }
 
     /** crawlBlend 指数逼近目标值（纯渲染平滑） */
-    private void approachBlend(double target) {
-        double k = Math.min(1.0, BLEND_SPEED * FRAME_STEP);
+    private void approachBlend(double target, double deltaTime) {
+        double k = Math.min(1.0, BLEND_SPEED * deltaTime);
         crawlBlend += (target - crawlBlend) * k;
         if (Math.abs(target - crawlBlend) < 0.01) {
             crawlBlend = target;

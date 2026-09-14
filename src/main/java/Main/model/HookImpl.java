@@ -39,6 +39,11 @@ public class HookImpl implements Hook {
     private int swingDir = 1;  // 摆动方向
     private Item grabbedItem;  // 当前携带的物品
 
+    /** 钩尖坐标复用缓冲（game-manager 卡顿优化：避免 hookTip 每帧多次 new double[2]） */
+    private final double[] tipBuf = new double[2];
+    /** 锚点坐标复用缓冲（同上，避免 anchorPoint 重复分配） */
+    private final double[] anchorBuf = new double[2];
+
     /**
      * 绳路折点（按锚点向外顺序）。鼹鼠碰撞偏转时在碰撞瞬间的钩尖处记录一个折点，
      * 绳索呈 锚点→折点₁→…→折点ₙ→钩尖 的折线；ropeLength 始终表示沿该折线的
@@ -337,25 +342,25 @@ public class HookImpl implements Hook {
             if (remaining <= segLen) {
                 // 钩尖落在本段（上一顶点 → 该折点）上：收回折返经过这里
                 double k = segLen == 0 ? 0 : remaining / segLen;
-                return new double[]{px + (bend[0] - px) * k, py + (bend[1] - py) * k};
+                tipBuf[0] = px + (bend[0] - px) * k;
+                tipBuf[1] = py + (bend[1] - py) * k;
+                return tipBuf;
             }
             remaining -= segLen;
             px = bend[0];
             py = bend[1];
         }
         // 最后一段沿当前飞行方向（鼹鼠偏转后即偏转方向）
-        return new double[]{
-                px + Math.cos(angle) * remaining,
-                py + Math.sin(angle) * remaining
-        };
+        tipBuf[0] = px + Math.cos(angle) * remaining;
+        tipBuf[1] = py + Math.sin(angle) * remaining;
+        return tipBuf;
     }
 
     /** 锚点坐标 */
     private double[] anchorPoint() {
-        return new double[]{
-                playerId == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2,
-                GameConfig.HOOK_ANCHOR_Y
-        };
+        anchorBuf[0] = playerId == 1 ? GameConfig.HOOK_ANCHOR_X_P1 : GameConfig.HOOK_ANCHOR_X_P2;
+        anchorBuf[1] = GameConfig.HOOK_ANCHOR_Y;
+        return anchorBuf;
     }
 
     /**

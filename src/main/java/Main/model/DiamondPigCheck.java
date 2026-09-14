@@ -53,7 +53,7 @@ public class DiamondPigCheck extends SelfCheck {
         DiamondPig pig = new DiamondPig(1220, 400);
         // 推进约 80 秒（5000 帧），多次横穿矿洞，全程不得越界
         for (int frame = 0; frame < 5000; frame++) {
-            pig.updatePosition();
+            pig.updatePosition(0.016);
             checkTrue(pig.getX() >= GameConfig.MINE_MIN_X - 1e-9,
                     "钻石猪越出左边界 x=" + pig.getX());
             checkTrue(pig.getX() <= GameConfig.MINE_MAX_X + 1e-9,
@@ -68,7 +68,7 @@ public class DiamondPigCheck extends SelfCheck {
         // 0.5 秒 = 约 32 帧；推进 40 帧（0.64s）后加速必须结束，
         // 且定时加速间隔 ≥2 秒，此期间不会被定时触发刷新
         for (int i = 0; i < 40; i++) {
-            pig.updatePosition();
+            pig.updatePosition(0.016);
         }
         checkFalse(pig.isDashing(), "冲刺应在 0.5 秒后结束");
     }
@@ -78,7 +78,7 @@ public class DiamondPigCheck extends SelfCheck {
         pig.setGrabbed(true);
         double x = pig.getX();
         for (int i = 0; i < 300; i++) {
-            pig.updatePosition();
+            pig.updatePosition(0.016);
         }
         checkEq(x, pig.getX(), 1e-9, "被钩爪携带后钻石猪应停止自主移动");
     }

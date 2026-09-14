@@ -4,5 +4,5 @@ package Main.model;
 public class Gold extends ItemImpl {
     public Gold(double x, double y) { super(x, y, 25, 1.2); }
     @Override public void onGrab(Hook hook) {}
-    @Override public void updatePosition() {}
+    @Override public void updatePosition(double deltaTime) {}
 }

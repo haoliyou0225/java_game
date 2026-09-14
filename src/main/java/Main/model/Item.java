@@ -3,7 +3,7 @@ package Main.model;
 
 public interface Item {
     void onGrab(Hook hook);
-    void updatePosition();
+    void updatePosition(double deltaTime);
     double getX();
     double getY();
     int getScore();

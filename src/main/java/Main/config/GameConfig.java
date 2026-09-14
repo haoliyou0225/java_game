@@ -28,7 +28,11 @@ public final class GameConfig {
     public static final int SCENE_ITEM_MAX_COUNT = 30;
     /** FR-01 左右半区福袋数量最大差值（≤1） */
     public static final int MAP_BAG_MAX_DIFF = 1;
-    /** FR-01 公平性校验最大重试次数（耗尽则取价值差最小的兜底方案） */
+    /**
+     * 地图公平性校验最大重试次数（耗尽取价值差最小的兜底方案）。
+     * 融合说明：game-manager 旧版生成器用 50 次；feature_ui 加权 9 品类生成器达到 ≤5%
+     * 价值差需要更多尝试，LevelFairnessCheck 以 300 次为验收基线（仍为有界重试，无死循环风险）。
+     */
     public static final int MAP_FAIRNESS_MAX_RETRY = 300;
 
     // 钩子锚点（渲染与碰撞共用，双钩左右分置）

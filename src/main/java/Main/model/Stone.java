@@ -10,5 +10,5 @@ public class Stone extends ItemImpl {
     }
 
     @Override
-    public void updatePosition() {}
+    public void updatePosition(double deltaTime) {}
 }

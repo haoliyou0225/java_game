@@ -12,7 +12,7 @@ public class BigGold extends ItemImpl {
     }
 
     @Override
-    public void updatePosition() {
+    public void updatePosition(double deltaTime) {
         // 大金块静止在矿洞地图上
     }
 

@@ -58,6 +58,9 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
     /** 上一帧双钩是否处于钩尖相撞状态（边沿检测：仅“未相撞→相撞”瞬间触发一次冻结，解冻收回途中钩尖未分离前不重复冻结，防卡死） */
     private boolean hooksColliding;
 
+    /** 每帧结算完成的物品缓冲区（复用避免每帧 new ArrayList 分配，game-manager 卡顿优化） */
+    private final List<Item> settledBuffer = new ArrayList<>();
+
     public GameManagerImpl() {
         // hook 原版初始化
         this.ropeP1 = new RopeImpl(GameConfig.ROPE_MAX_EXTEND_LENGTH);
@@ -128,9 +131,11 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
 
         // 2. 物品位置更新 + 携带物品收回完成时结算分数
         //    普通物品走 FR-17 结算链；福袋走 FR-14（不计金币，加权抽道具直接入库存）
-        List<Item> settled = new ArrayList<>();
+        //    复用 settledBuffer 避免每帧分配（game-manager 卡顿优化）
+        settledBuffer.clear();
         for (Item item : sceneItemList) {
-            item.updatePosition();
+            // game-manager：物品自主运动按真实帧间隔 deltaTime 推进（帧率无关，消除卡顿感）
+            item.updatePosition(deltaTime);
             if (item.isGrabbed() && item.getWeight() > 0) {
                 Hook owner = itemOnHook(item) == 1 ? hookP1 : hookP2;
                 if (owner.getState() == HookState.SWINGING) {
@@ -152,7 +157,7 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
                     // 写入 GameManager 和 GameModel 双体系
                     gameData.addScore(owner.getPlayerId(), finalScore);
                     grabber.addScore(finalScore);
-                    settled.add(item);
+                    settledBuffer.add(item);
 
                     // 结算瞬时飘字（锚点旁显示 2 秒）
                     if (owner instanceof HookImpl) {
@@ -174,13 +179,21 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
                 }
             }
         }
-        sceneItemList.removeAll(settled);
+        sceneItemList.removeAll(settledBuffer);
 
         // 3. 移除已爆炸的炸弹
         sceneItemList.removeIf(i -> (i instanceof Bomb && ((Bomb) i).isExploded()));
 
-        // 3.5 FR-08 自动结束：场上可抓取物品全部清空，且双方钩爪均回到 SWINGING → 立即结束
-        if (sceneItemList.isEmpty()
+        // 3.5 FR-08 自动结束（game-manager 新规则）：场上除鼹鼠外的可抓取物品全部清空
+        //     （鼹鼠只会偏转钩爪、不可抓取，留场不影响结束），且双方钩爪均回到 SWINGING → 立即结束
+        boolean onlyMoleLeft = true;
+        for (Item item : sceneItemList) {
+            if (!(item instanceof Mole)) {
+                onlyMoleLeft = false;
+                break;
+            }
+        }
+        if (onlyMoleLeft
                 && hookP1.getState() == HookState.SWINGING
                 && hookP2.getState() == HookState.SWINGING) {
             setState(GameState.FINISHED);
@@ -190,10 +203,8 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
             return;
         }
 
-        // 4. GameManager 原版每秒倒计时（GameTimerImpl 也在倒计时，双重保障）
-        if (Math.random() < deltaTime) {
-            gameData.countDownTick();
-        }
+        // 4. 倒计时由 GameTimerImpl 在后台线程每秒执行，此处不再用 Math.random 冗余触发
+        //    （game-manager：移除概率性 countDownTick，避免双重倒计时口径不一致）
     }
 
     /**

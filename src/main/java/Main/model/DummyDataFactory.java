@@ -125,7 +125,7 @@ public final class DummyDataFactory {
             // 假实现：真实抓取行为接入后替换
         }
 
-        @Override public void updatePosition() {
+        @Override public void updatePosition(double deltaTime) {
             // 假实现：静止物品无需移动
         }
 

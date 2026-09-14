@@ -4,5 +4,5 @@ package Main.model;
 public class Diamond extends ItemImpl {
     public Diamond(double x, double y) { super(x, y, 600, 2.0); }
     @Override public void onGrab(Hook hook) {}
-    @Override public void updatePosition() {}
+    @Override public void updatePosition(double deltaTime) {}
 }
