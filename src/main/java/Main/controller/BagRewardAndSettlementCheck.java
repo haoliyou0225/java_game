@@ -1,7 +1,8 @@
 // FR-14/FR-15/FR-17/FR-18 福袋与结算验收自检：
-// 加权抽奖 炸药20%/其他5种道具各16%（不再开出金币）；
+// 加权抽奖 炸药20%/其他5种道具各16%（仅道具，不开出金币）；
 // 结算链 基础价值→石头×3→钻石×2→幸运草×1.5→四舍五入；
-// 库存上限（炸药3/短时道具5/持续单激活位）溢出转 50 金币，持续道具重复获得转 50 金币。
+// 库存上限（炸药3/短时道具5/持续道具5）：福袋溢出时道具丢弃，不折算金币；
+// 持续道具已激活时玩家主动按键再次使用才折 50 金币（玩家行为，非福袋发放）。
 // 与 GameManagerImpl 同包以访问包级静态方法；直接 java Main.controller.BagRewardAndSettlementCheck 运行。
 package Main.controller;
 
@@ -27,17 +28,16 @@ public class BagRewardAndSettlementCheck extends SelfCheck {
         check.luckyCloverMultipliesByOnePointFiveAndRounds();
         check.settlementChainAppliesStoneBookBeforeClover();
         check.noBonusReturnsBaseValue();
-        check.goldRewardIsIn100To800Range();
-        check.dynamiteOverflowConvertsTo50Gold();
+        check.dynamiteOverflowDiscardedWithoutGold();
         check.dynamiteNormalGainEntersInventory();
-        check.shortItemCapFiveThenConvertsTo50Gold();
+        check.shortItemCapFiveThenDiscarded();
         check.shortItemNormalGainEntersInventory();
-        check.persistentItemFirstGainActivatesSecondGainConvertsTo50Gold();
+        check.persistentItemEntersInventoryAndReuseConvertsTo50Gold();
         check.playerStartsWithOneDynamite();
         check.finish();
     }
 
-    // ===== FR-14 加权抽奖权重（炸药 20% / 其他 5 种各 16%，不再有金币档） =====
+    // ===== FR-14 加权抽奖权重（炸药 20% / 其他 5 种各 16%，仅道具） =====
 
     private void rollBagExtraRewardMatches20_16_16_16_16_16Weights() {
         Random rnd = new Random(20260911L);
@@ -49,9 +49,9 @@ public class BagRewardAndSettlementCheck extends SelfCheck {
             counts.merge(r, 1, Integer::sum);
         }
 
-        // 金币档不再开出，概率应为 0
-        double goldPct = pct(counts, GameConfig.MysteryReward.MYSTERY_GOLD, trials);
-        checkTrue(goldPct < 0.5, "金币档已移除，概率应≈0，实际 " + goldPct);
+        // 六类奖励概率合计应为 100%（金币档已移除，枚举中不再存在）
+        int total = counts.values().stream().mapToInt(Integer::intValue).sum();
+        checkEq(trials, total, "所有抽奖结果都应落在六种道具奖励内");
 
         double dynamitePct = pct(counts, GameConfig.MysteryReward.DYNAMITE, trials);
         checkTrue(Math.abs(dynamitePct - 20) < 3, "炸药档应约 20%，实际 " + dynamitePct);
@@ -133,107 +133,82 @@ public class BagRewardAndSettlementCheck extends SelfCheck {
                 "无道具小金块应得基础 25");
     }
 
-    // ===== FR-14 金币档 / FR-15 库存上限 / FR-18 重复转 50 金 =====
+    // ===== FR-15 库存上限：福袋溢出道具直接丢弃，不折算金币 =====
 
-    private void goldRewardIsIn100To800Range() {
-        Random rnd = new Random(7L);
+    private void dynamiteOverflowDiscardedWithoutGold() {
         Player player = new PlayerImpl();
-        for (int i = 0; i < 200; i++) {
-            int gold = GameManagerImpl.grantBagExtra(
-                    GameConfig.MysteryReward.MYSTERY_GOLD, player, rnd);
-            checkTrue(gold >= GameConfig.MYSTERY_BAG_MIN_GOLD
-                            && gold <= GameConfig.MYSTERY_BAG_MAX_GOLD,
-                    "金币档应在 100~800 之间，实际 " + gold);
-        }
-    }
-
-    private void dynamiteOverflowConvertsTo50Gold() {
-        Player player = new PlayerImpl();
+        int scoreBefore = player.getScore();
         // 开局自带 1 个炸药，补到上限 3
         player.addDynamite(10);
         checkEq(GameConfig.PLAYER_MAX_DYNAMITE_COUNT, player.getDynamiteCount(),
                 "炸药库存应被限制在上限 3");
 
-        int gold = GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.DYNAMITE, player, new Random());
-        checkEq(GameConfig.ITEM_DUP_AUTO_GOLD, gold, "炸药满 3 再获得应转 50 金币");
+        // 满库存再从福袋获得：丢弃、库存不变、分数不变（无金币折算）
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.DYNAMITE, player);
         checkEq(GameConfig.PLAYER_MAX_DYNAMITE_COUNT, player.getDynamiteCount(),
                 "溢出后炸药库存不得超限");
+        checkEq(scoreBefore, player.getScore(), "福袋溢出不得折算金币");
     }
 
     private void dynamiteNormalGainEntersInventory() {
         Player player = new PlayerImpl();
-        int gold = GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.DYNAMITE, player, new Random());
-        checkEq(0, gold, "炸药正常入库不附带金币");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.DYNAMITE, player);
         checkEq(2, player.getDynamiteCount(), "开局 1 个 + 福袋 1 个 = 2");
+        checkEq(0, player.getScore(), "福袋道具正常入库不附带金币");
     }
 
-    private void shortItemCapFiveThenConvertsTo50Gold() {
+    private void shortItemCapFiveThenDiscarded() {
         Player player = new PlayerImpl();
+        int scoreBefore = player.getScore();
         checkEq(5, player.addPowerPotion(10), "强力药水应入库到上限 5");
-        checkEq(GameConfig.ITEM_DUP_AUTO_GOLD,
-                GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.POWER_POTION,
-                        player, new Random()),
-                "强力药水满 5 再获得应转 50 金币");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.POWER_POTION, player);
         checkEq(5, player.getPowerPotionCount(), "溢出后强力药水库存不得超限");
 
         checkEq(5, player.addFreezeBox(10), "冰冻箱应入库到上限 5");
-        checkEq(GameConfig.ITEM_DUP_AUTO_GOLD,
-                GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.FREEZE_BOX,
-                        player, new Random()),
-                "冰冻箱满 5 再获得应转 50 金币");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.FREEZE_BOX, player);
         checkEq(5, player.getFreezeBoxCount(), "溢出后冰冻箱库存不得超限");
+
+        checkEq(scoreBefore, player.getScore(), "短时道具福袋溢出不得折算金币");
     }
 
     private void shortItemNormalGainEntersInventory() {
         Player player = new PlayerImpl();
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.POWER_POTION, player, new Random()),
-                "强力药水正常入库不附带金币");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.POWER_POTION, player);
         checkEq(1, player.getPowerPotionCount(), "强力药水库存应为 1");
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.FREEZE_BOX, player, new Random()),
-                "冰冻箱正常入库不附带金币");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.FREEZE_BOX, player);
         checkEq(1, player.getFreezeBoxCount(), "冰冻箱库存应为 1");
+        checkEq(0, player.getScore(), "短时道具正常入库不附带金币");
     }
 
-    private void persistentItemFirstGainActivatesSecondGainConvertsTo50Gold() {
+    // ===== FR-18 持续道具：福袋只入库存；按键首次激活，已激活再使用才折 50 金币 =====
+
+    private void persistentItemEntersInventoryAndReuseConvertsTo50Gold() {
         Player player = new PlayerImpl();
 
-        // FR-18：持续道具先入库存（grantBagExtra 返回 0=成功入库），玩家按键 use 激活
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.LUCKY_CLOVER, player, new Random()),
-                "首次获得幸运草应入库，不转金币");
+        // FR-18：持续道具从福袋获得只入库存，玩家再按键 use 激活
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.LUCKY_CLOVER, player);
         checkEq(1, player.getLuckyCloverCount(), "幸运草库存应为 1");
         checkTrue(player.useLuckyClover() == Main.model.PersistItemUseResult.ACTIVATED, "按键使用幸运草应首次激活");
         checkTrue(player.hasLuckyClover(), "幸运草应处于激活状态");
-        // FR-18：已激活再抽 → grantBagExtra 入库存（返回 0），按键 use 时转 50 金币
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.LUCKY_CLOVER, player, new Random()),
-                "已激活再抽幸运草应入库不转金币");
+        // 已激活再从福袋获得：仍入库存（库存 2），不发金币
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.LUCKY_CLOVER, player);
+        checkEq(2, player.getLuckyCloverCount(), "已激活再抽幸运草应继续入库存");
+        checkEq(0, player.getScore(), "福袋发放幸运草不得附带金币");
+        // 玩家主动再次按键使用 → 折 50 金币
         checkTrue(player.useLuckyClover() == Main.model.PersistItemUseResult.DUPLICATE_GOLD,
                 "已激活再使用幸运草应转 50 金币");
 
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.DIAMOND_BOOST, player, new Random()),
-                "首次获得钻石药水应入库");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.DIAMOND_BOOST, player);
+        checkEq(1, player.getDiamondBoostCount(), "钻石药水库存应为 1");
         checkTrue(player.useDiamondBoost() == Main.model.PersistItemUseResult.ACTIVATED, "按键使用钻石药水应首次激活");
         checkTrue(player.hasDiamondBoost(), "钻石药水应处于激活状态");
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.DIAMOND_BOOST, player, new Random()),
-                "已激活再抽钻石药水应入库不转金币");
         checkTrue(player.useDiamondBoost() == Main.model.PersistItemUseResult.DUPLICATE_GOLD,
                 "已激活再使用钻石药水应转 50 金币");
 
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.STONE_BOOK, player, new Random()),
-                "首次获得石头书应入库");
+        GameManagerImpl.grantBagExtra(GameConfig.MysteryReward.STONE_BOOK, player);
+        checkEq(1, player.getStoneBookCount(), "石头书库存应为 1");
         checkTrue(player.useStoneBook() == Main.model.PersistItemUseResult.ACTIVATED, "按键使用石头书应首次激活");
         checkTrue(player.hasStoneBook(), "石头书应处于激活状态");
-        checkEq(0, GameManagerImpl.grantBagExtra(
-                GameConfig.MysteryReward.STONE_BOOK, player, new Random()),
-                "已激活再抽石头书应入库不转金币");
         checkTrue(player.useStoneBook() == Main.model.PersistItemUseResult.DUPLICATE_GOLD,
                 "已激活再使用石头书应转 50 金币");
     }

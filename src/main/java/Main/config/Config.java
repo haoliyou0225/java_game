@@ -20,4 +20,14 @@ public final class Config {
     public static final double HOOK_START_Y = 80;
     /** HUD 顶部信息栏高度（FR-29/FR-30），GameView 地面条上沿与之对齐 */
     public static final double HUD_HEIGHT = 90;
+
+    // ===== 人物头像 / 结算表情序列帧 =====
+    /** HUD 顶部玩家静态头像显示高度（像素），宽度按原图比例自动缩放，不播动画 */
+    public static final double HUD_AVATAR_HEIGHT = 42;
+    /** 结算界面人物立绘高度占屏幕高度的比例（多分辨率适配，宽度按帧图比例缩放） */
+    public static final double RESULT_CHAR_HEIGHT_RATIO = 0.42;
+    /** 结算界面人物距屏幕左右边缘距离占屏幕宽度的比例（左右对称，不遮挡中间结算卡片） */
+    public static final double RESULT_CHAR_SIDE_MARGIN_RATIO = 0.07;
+    /** 结算表情序列帧帧率（FPS），每个角色按自己的帧数独立循环；数值越小动作越慢 */
+    public static final double RESULT_CHAR_FRAME_FPS = 6;
 }

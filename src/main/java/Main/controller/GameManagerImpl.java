@@ -127,7 +127,7 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
         resolveHookConflict();
 
         // 2. 物品位置更新 + 携带物品收回完成时结算分数
-        //    普通物品走 FR-17 结算链；福袋走 FR-14（先必给金币，再加权抽额外奖励入库存）
+        //    普通物品走 FR-17 结算链；福袋走 FR-14（不计金币，加权抽道具直接入库存）
         List<Item> settled = new ArrayList<>();
         for (Item item : sceneItemList) {
             item.updatePosition();
@@ -139,11 +139,10 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
 
                     int finalScore;
                     GameConfig.MysteryReward reward = null;
-                    int extraGold = 0;
                     if (item instanceof MysteryBag) {
-                        // 福袋仅开出道具，不获得金币（基础金币、溢出转化金币均不发放）
+                        // 福袋仅开出道具入库存，不获得任何金币（库存满则道具丢弃）
                         reward = rollBagExtraReward(ThreadLocalRandom.current());
-                        grantBagExtra(reward, grabber, ThreadLocalRandom.current());
+                        grantBagExtra(reward, grabber);
                         finalScore = 0;
                     } else {
                         // FR-17：基础价值 → 石头×3 → 钻石×2 → 幸运草×1.5 → 四舍五入
@@ -170,7 +169,7 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
                     // 空钩/未拉回/中途失败/未结算时不进入此分支，不会触发回调
                     if (onCatchSettled != null) {
                         onCatchSettled.accept(new CatchFeedbackEvent(
-                                owner.getPlayerId(), item, finalScore, reward, extraGold));
+                                owner.getPlayerId(), item, finalScore, reward));
                     }
                 }
             }
@@ -431,7 +430,7 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
 
     /**
      * FR-17 普通物品结算链：基础价值 → 石头×3（石头书）→ 钻石×2（钻石药水）→ 幸运草×1.5 → 四舍五入。
-     * 幸运草不作用于道具库存溢出转化的 50 金币（该部分在 grantBagExtra 中直接发放）。
+     * 福袋不走此链（福袋无金币价值，仅发放道具）。
      * 包级静态以便单元测试验证结算顺序与倍率。
      */
     static int settleNormalItem(Item item, Player player) {
@@ -450,32 +449,18 @@ public class GameManagerImpl implements GameManager, GameModel, GameActionHandle
 
     /**
      * FR-14/FR-15/FR-18 福袋额外奖励发放：道具自动入库存；
-     * 炸药满 3、短时道具满 5、持续道具已激活时，再次获得自动转为 50 金币。
-     * 包级静态以便单元测试验证库存溢出转化。
-     *
-     * @return 本次奖励附带的金币（金币档为 100~800 随机；溢出转化为 50；道具正常入库为 0）
+     * 库存已满（炸药 3 / 短时道具 5 / 持续道具 5）时该道具直接丢弃，不折算任何金币。
+     * 包级静态以便单元测试直接验证库存变化。
      */
-    static int grantBagExtra(GameConfig.MysteryReward reward, Player player, Random rnd) {
+    static void grantBagExtra(GameConfig.MysteryReward reward, Player player) {
         switch (reward) {
-            case MYSTERY_GOLD:
-                // FR-14：金币档发放 100~800 随机金币
-                return GameConfig.MYSTERY_BAG_MIN_GOLD
-                        + rnd.nextInt(GameConfig.MYSTERY_BAG_MAX_GOLD - GameConfig.MYSTERY_BAG_MIN_GOLD + 1);
-            case DYNAMITE:
-                return player.addDynamite(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
-            case POWER_POTION:
-                return player.addPowerPotion(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
-            case FREEZE_BOX:
-                return player.addFreezeBox(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
-            case LUCKY_CLOVER:
-                // FR-18：持续道具先入库存，玩家按 F/Num3 消耗激活（库存满则折 50 金币）
-                return player.addLuckyClover(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
-            case DIAMOND_BOOST:
-                return player.addDiamondBoost(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
-            case STONE_BOOK:
-                return player.addStoneBook(1) == 0 ? GameConfig.ITEM_DUP_AUTO_GOLD : 0;
-            default:
-                return 0;
+            case DYNAMITE -> player.addDynamite(1);
+            case POWER_POTION -> player.addPowerPotion(1);
+            case FREEZE_BOX -> player.addFreezeBox(1);
+            // FR-18：持续道具先入库存，玩家再按 F/Num3 等键消耗激活（库存满则丢弃）
+            case LUCKY_CLOVER -> player.addLuckyClover(1);
+            case DIAMOND_BOOST -> player.addDiamondBoost(1);
+            case STONE_BOOK -> player.addStoneBook(1);
         }
     }
 

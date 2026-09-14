@@ -29,6 +29,11 @@ import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -71,6 +76,59 @@ public class GameViewImpl implements GameView {
     /** 上一帧场上炸弹数量（-1 表示尚未渲染过；数量减少即 TNT 爆炸，播放炸弹音效） */
     private int prevBombCount = -1;
 
+    // ===== 特效系统（纯视图层，不修改游戏逻辑） =====
+    /** 上一帧各炸弹位置（key="x,y" 取整，value={x,y}）；炸弹消失即 TNT 爆炸，生成爆炸特效 */
+    private final Map<String, double[]> prevBombPositions = new LinkedHashMap<>();
+    /** 活跃的瞬时特效列表（爆炸等，播放完自动移除） */
+    private final List<VisualEffect> activeEffects = new ArrayList<>();
+
+    /** 瞬时视觉特效（爆炸等）：位置 + 尺寸 + 生命周期 + 贴图 */
+    private static class VisualEffect {
+        final double cx, cy;     // 中心坐标
+        final double size;       // 直径（像素）
+        final long startTime;    // 起始时间 ms
+        final int durationMs;    // 总持续时间 ms
+        final Image image;        // 特效贴图
+        VisualEffect(double cx, double cy, double size, int durationMs, Image image) {
+            this.cx = cx; this.cy = cy; this.size = size;
+            this.durationMs = durationMs; this.image = image;
+            this.startTime = System.currentTimeMillis();
+        }
+    }
+
+    /** 爆炸特效贴图（/images/SpecialEffects/炸弹爆炸特效.png，classpath 加载一次） */
+    private static volatile Image explosionSprite;
+    private static volatile boolean explosionSpriteTried;
+    /** 冰冻特效贴图（/images/SpecialEffects/冰冻特效.png，classpath 加载一次） */
+    private static volatile Image freezeSprite;
+    private static volatile boolean freezeSpriteTried;
+
+    private Image loadExplosionSprite() {
+        if (explosionSpriteTried) return explosionSprite;
+        synchronized (GameViewImpl.class) {
+            if (explosionSpriteTried) return explosionSprite;
+            explosionSpriteTried = true;
+            try (InputStream is = getClass().getResourceAsStream(
+                    "/images/SpecialEffects/炸弹爆炸特效.png")) {
+                explosionSprite = is == null ? null : new Image(is);
+            } catch (Exception e) { explosionSprite = null; }
+            return explosionSprite;
+        }
+    }
+
+    private Image loadFreezeSprite() {
+        if (freezeSpriteTried) return freezeSprite;
+        synchronized (GameViewImpl.class) {
+            if (freezeSpriteTried) return freezeSprite;
+            freezeSpriteTried = true;
+            try (InputStream is = getClass().getResourceAsStream(
+                    "/images/SpecialEffects/冰冻特效.png")) {
+                freezeSprite = is == null ? null : new Image(is);
+            } catch (Exception e) { freezeSprite = null; }
+            return freezeSprite;
+        }
+    }
+
     public GameViewImpl(Canvas canvas) {
         this.canvas = canvas;
         Image bg = null;
@@ -89,8 +147,8 @@ public class GameViewImpl implements GameView {
         double w = canvas.getWidth();
         double h = canvas.getHeight();
 
-        // 0. 音效检测：TNT 爆炸（炸弹数量减少）与抓取成功（钩子状态进入 GRABBING）
-        detectSfxEvents(model);
+        // 0. 音效检测 + 特效检测：TNT 爆炸 / 炸药使用 / 冰冻
+        detectSfxAndEffects(model);
 
         // 1. 矿洞背景：优先 mineBG1.png 全屏拉伸，加载失败回退纯色矿洞
         if (caveBgImage != null) {
@@ -127,47 +185,87 @@ public class GameViewImpl implements GameView {
             }
         }
 
-        // 6. 玩家1钩爪（黑色绳索）：起点标记 + 绳索 + 钩爪头
+        // 6. 玩家1钩爪（黑色绳索）：起点标记 + 绳索 + 钩爪头 + 冰冻特效
         drawHook(gc, model.getHook1(), Color.BLACK);
 
         // 7. 玩家2钩爪（黑色绳索）
         drawHook(gc, model.getHook2(), Color.BLACK);
+
+        // 8. 渲染瞬时特效（爆炸等，绘制在所有物品和钩爪之上）
+        renderEffects(gc);
     }
 
     /**
-     * 每帧音效检测（仅 View 层状态变化检测，不修改游戏逻辑）：
+     * 每帧音效 + 特效检测（仅 View 层状态变化检测，不修改游戏逻辑）：
      * <ul>
-     *   <li>场上炸弹数量比上一帧减少 → TNT 爆炸，播放 bomb 音效；</li>
-     *   <li>任一钩子状态从非 GRABBING 变为 GRABBING → 抓取成功，播放 largegold 音效。</li>
+     *   <li>场上炸弹位置消失 → TNT 爆炸，播放 bomb 音效 + 生成爆炸特效（炸弹影响范围）；</li>
+     *   <li>钩子状态从 GRABBING 变为 RETRACTING → 玩家使用炸药，生成爆炸特效（石头大小）；</li>
+     *   <li>钩子状态从非 GRABBING 变为 GRABBING → 抓取成功，播放 largegold 音效。</li>
      * </ul>
      */
-    private void detectSfxEvents(GameModel model) {
+    private void detectSfxAndEffects(GameModel model) {
         MineMap mineMap = model.getMineMap();
+        Image explosionImg = loadExplosionSprite();
+
+        // TNT 爆炸检测：比较炸弹位置集合，消失的位置即爆炸点
         if (mineMap != null && mineMap.getItems() != null) {
+            Map<String, double[]> curBombPositions = new LinkedHashMap<>();
             int bombCount = 0;
             for (Item item : mineMap.getItems()) {
-                if (item instanceof Bomb) {
+                if (item instanceof Bomb && !((Bomb) item).isExploded()) {
                     bombCount++;
+                    String key = (int) item.getX() + "," + (int) item.getY();
+                    curBombPositions.put(key, new double[]{item.getX(), item.getY()});
                 }
             }
-            if (prevBombCount >= 0 && bombCount < prevBombCount) {
-                AudioManager.get().playSfx("bomb");
+            // 上一帧有但本帧消失的炸弹位置 → TNT 爆炸特效（直径 = TNT_EXPLOSION_RADIUS × 2）
+            if (!prevBombPositions.isEmpty()) {
+                for (Map.Entry<String, double[]> e : prevBombPositions.entrySet()) {
+                    if (!curBombPositions.containsKey(e.getKey())) {
+                        double[] pos = e.getValue();
+                        if (prevBombCount >= 0 && bombCount < prevBombCount) {
+                            AudioManager.get().playSfx("bomb");
+                        }
+                        if (explosionImg != null) {
+                            activeEffects.add(new VisualEffect(
+                                    pos[0], pos[1],
+                                    Main.config.GameConfig.TNT_EXPLOSION_RADIUS * 2,
+                                    600, explosionImg));
+                        }
+                    }
+                }
             }
+            prevBombPositions.clear();
+            prevBombPositions.putAll(curBombPositions);
             prevBombCount = bombCount;
         }
-        detectGrabSfx(model.getHook1(), true);
-        detectGrabSfx(model.getHook2(), false);
+
+        // 抓取音效 + 炸药爆炸特效检测
+        detectGrabAndDynamiteSfx(model.getHook1(), true, explosionImg);
+        detectGrabAndDynamiteSfx(model.getHook2(), false, explosionImg);
     }
 
-    /** 检测单个钩子是否本帧刚进入 GRABBING（前一帧非 GRABBING），是则播放抓取音效 */
-    private void detectGrabSfx(Hook hook, boolean isHook1) {
+    /**
+     * 检测单个钩子：
+     * <ul>
+     *   <li>从非 GRABBING 变为 GRABBING → 抓取成功，播放 largegold 音效；</li>
+     *   <li>从 GRABBING 变为 RETRACTING → 玩家使用炸药炸毁携带物，生成爆炸特效（石头大小）。</li>
+     * </ul>
+     */
+    private void detectGrabAndDynamiteSfx(Hook hook, boolean isHook1, Image explosionImg) {
         if (hook == null) {
             return;
         }
         HookState prev = isHook1 ? prevHook1State : prevHook2State;
         HookState current = hook.getState();
+        // 抓取成功音效
         if (prev != HookState.GRABBING && current == HookState.GRABBING) {
             AudioManager.get().playSfx("largegold");
+        }
+        // 炸药使用：GRABBING → RETRACTING（只有使用炸药才会出现此转换）
+        if (prev == HookState.GRABBING && current == HookState.RETRACTING && explosionImg != null) {
+            activeEffects.add(new VisualEffect(
+                    hook.getX(), hook.getY(), 40, 500, explosionImg));
         }
         if (isHook1) {
             prevHook1State = current;
@@ -1091,7 +1189,46 @@ public class GameViewImpl implements GameView {
     }
 
     /**
-     * 绘制单个钩爪：绳索 → 钩爪贴图。
+     * 渲染瞬时特效（爆炸等）：遍历 activeEffects，按生命周期绘制贴图，
+     * 前 30% 时间放大入场，后 70% 淡出；过期后移除。
+     */
+    private void renderEffects(GraphicsContext gc) {
+        long now = System.currentTimeMillis();
+        Iterator<VisualEffect> it = activeEffects.iterator();
+        while (it.hasNext()) {
+            VisualEffect fx = it.next();
+            long elapsed = now - fx.startTime;
+            if (elapsed >= fx.durationMs) {
+                it.remove();
+                continue;
+            }
+            double progress = (double) elapsed / fx.durationMs; // 0→1
+            // 入场（前 25%）：从 0.3 放大到 1.0；停留 25%~50%；淡出 50%~100%
+            double scale;
+            double alpha;
+            if (progress < 0.25) {
+                scale = 0.3 + (progress / 0.25) * 0.7; // 0.3→1.0
+                alpha = 1.0;
+            } else if (progress < 0.50) {
+                scale = 1.0;
+                alpha = 1.0;
+            } else {
+                scale = 1.0;
+                alpha = 1.0 - (progress - 0.50) / 0.50; // 1.0→0
+            }
+            double drawSize = fx.size * scale;
+            gc.save();
+            gc.setGlobalAlpha((float) Math.max(0, Math.min(1, alpha)));
+            gc.drawImage(fx.image,
+                    fx.cx - drawSize / 2, fx.cy - drawSize / 2,
+                    drawSize, drawSize);
+            gc.setGlobalAlpha(1.0f);
+            gc.restore();
+        }
+    }
+
+    /**
+     * 绘制单个钩爪：绳索 → 钩爪贴图 → 冰冻特效（冻结时覆盖在钩爪上）。
      * 矿工由 HUDViewImpl 以 ImageView 渲染在 topbg 之上（层级高于 Canvas）；
      * 钩爪贴图根据 getAngle() 旋转朝向。
      */
@@ -1114,6 +1251,21 @@ public class GameViewImpl implements GameView {
         } else {
             gc.setFill(color);
             gc.fillOval(hook.getX() - 8, hook.getY() - 8, 16, 16);
+        }
+
+        // 3. 冰冻特效：钩爪被冻结时，在钩爪位置叠加冰冻贴图（大小=钩爪大小），持续到解冻
+        if (hook.isFrozen()) {
+            Image freezeImg = loadFreezeSprite();
+            if (freezeImg != null && !freezeImg.isError()) {
+                double fs = 70; // 略大于钩爪贴图(56)，覆盖整个钩爪
+                gc.save();
+                gc.setGlobalAlpha(0.85f);
+                gc.drawImage(freezeImg,
+                        hook.getX() - fs / 2, hook.getY() - fs / 2,
+                        fs, fs);
+                gc.setGlobalAlpha(1.0f);
+                gc.restore();
+            }
         }
 
         // 结算瞬时飘字

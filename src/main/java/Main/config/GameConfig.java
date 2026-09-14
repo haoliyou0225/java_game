@@ -101,10 +101,7 @@ public final class GameConfig {
     public static final int PLAYER_MAX_PERSIST_ITEM_COUNT = 5;
     /** TNT爆炸半径 单位像素（FR-12：150，不计分/不扣金币/不眩晕） */
     public static final int TNT_EXPLOSION_RADIUS = 150;
-    /** 福袋必给金币下限（FR-01/FR-14：生成时预计算 100~800） */
-    public static final int MYSTERY_BAG_MIN_GOLD = 100;
-    /** 福袋必给金币上限 */
-    public static final int MYSTERY_BAG_MAX_GOLD = 800;
+
     /** 鼹鼠抓取基础金币（FR-10：10） */
     public static final int MOLE_CAPTURE_GOLD = 10;
     /** 石头基础金币（FR-10：11） */
@@ -112,8 +109,8 @@ public final class GameConfig {
     /** 石头收藏书激活时石头价值倍率（FR-17：石头×3） */
     public static final int STONE_BOOK_MULTIPLIER = 3;
 
-    // ===== 福袋额外奖励（炸药 20% / 其他 5 种道具各 16%，不再开出金币） =====
-    /** 炸药满 3、短时道具满 5、持续道具已激活时，再次获得自动转为金币（FR-15/FR-18） */
+    // ===== 福袋额外奖励（炸药 20% / 其他 5 种道具各 16%，仅道具，不开出金币） =====
+    /** 玩家主动使用已激活的持续道具（幸运草/钻石升级/石头书）时折算的金币（FR-18）；福袋溢出不再发放金币 */
     public static final int ITEM_DUP_AUTO_GOLD = 50;
     /** 幸运草效果：本局物品基础收益倍率（+50%，FR-17/FR-18） */
     public static final double LUCKY_CLOVER_BONUS_RATE = 1.5;
@@ -161,13 +158,12 @@ public final class GameConfig {
     public static final double PIG_ESCAPE_COOLDOWN_SEC = 0.5;
 
     /**
-     * 福袋额外奖励枚举（FR-14 七类）：
-     * 金币 / 炸药 / 强力药水（短时）/ 冰冻箱（短时）/ 幸运草（持续）/ 钻石升级（持续）/ 石头书（持续）。
+     * 福袋额外奖励枚举（FR-14 六类，仅道具，不再开出金币）：
+     * 炸药 / 强力药水（短时）/ 冰冻箱（短时）/ 幸运草（持续）/ 钻石升级（持续）/ 石头书（持续）。
      * 同时用作结算飘字的图标类型。
      */
     public enum MysteryReward {
-        MYSTERY_GOLD("金币"),          // 额外 100~800 随机金币
-        DYNAMITE("炸药"),              // 炸药 +1，满 3 转 50 金币
+        DYNAMITE("炸药"),              // 炸药 +1，库存满 3 时丢弃，不折金币
         POWER_POTION("强力药水"),      // 短时道具：自身收回×2 持续 10 秒，库存上限 5
         FREEZE_BOX("冰冻箱"),          // 短时道具：冻结对方钩爪 3 秒，库存上限 5
         LUCKY_CLOVER("幸运草"),        // 持续道具：本局物品收益 +50%，单激活位

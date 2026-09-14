@@ -207,7 +207,6 @@ public class CatchFeedbackPane {
 
     private static String iconForReward(GameConfig.MysteryReward reward) {
         return switch (reward) {
-            case MYSTERY_GOLD -> "/images/HUD/金块.png";
             case DYNAMITE -> "/images/HUD/炸药.png";
             case POWER_POTION -> "/images/HUD/强力药水.png";
             case FREEZE_BOX -> "/images/HUD/冰冻箱.png";

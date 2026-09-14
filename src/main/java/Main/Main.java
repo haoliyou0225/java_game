@@ -316,6 +316,79 @@ public class Main extends Application {
         // 暂停遮罩（挂在 gamePane 顶层覆盖游戏画面；初始隐藏）
         PauseView pauseView = new PauseViewImpl();
 
+        // 钩子真实物理驱动：每帧由 AnimationTimer 推进 HookImpl 钟摆/抛出/收回/抓取，并重绘画面
+        // PAUSED 时 gameLoopTick 内部冻结，与 GameTimer 倒计时联动
+        final long[] lastFrameNanos = {0};
+        final AnimationTimer physicsTimer = new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                if (lastFrameNanos[0] == 0) {
+                    lastFrameNanos[0] = now;
+                    return;
+                }
+                double deltaTime = (now - lastFrameNanos[0]) / 1_000_000_000.0;
+                lastFrameNanos[0] = now;
+                // 防止窗口失焦后 deltaTime 留间过长导致物理跳变
+                if (deltaTime > 0.1) deltaTime = 0.1;
+                model.gameLoopTick(deltaTime);
+                gameView.render(model);
+                hudView.render(model);
+            }
+        };
+
+        // 倒计时控制器：每秒递减 1，归零结束对局（FR-10）
+        // 注意：GameTimerImpl 的 tick 在后台线程执行，所有 UI 操作必须用
+        // Platform.runLater 切回 JavaFX Application Thread（分层约束：controller 不依赖 javafx）
+        final GameTimer timer = new GameTimerImpl(model);
+
+        // 暂停遮罩按钮回调：复用结算流程的完整资源释放逻辑
+        // 「重新开始」：停止计时器 + 释放模型 + 移除旧对局节点 + 开启全新对局（FR-25）
+        pauseView.setOnRestart(() -> {
+            // 1. 停止本局全部后台计时器
+            physicsTimer.stop();
+            timer.stop();
+            // 2. 释放模型后台资源（钩爪收回线程池等）
+            model.shutdown();
+            model.setOnGameEnd(null);
+            model.setOnCatchSettled(null);
+            // 3. 清空场景级按键监听
+            Scene s = root.getScene();
+            if (s != null) {
+                s.setOnKeyPressed(null);
+                s.setOnKeyReleased(null);
+            }
+            // 4. 移除暂停遮罩与整棵对局节点树
+            pauseView.hide();
+            root.getChildren().remove(gamePane);
+            currentInputController = null;
+            // 5. 开启全新对局（模型由 startGame 整体重建，无历史残留）
+            startGame(root);
+        });
+
+        // 「回到主菜单」：停止计时器 + 释放模型 + 移除旧对局节点 + 显示主菜单
+        pauseView.setOnBackToMenu(() -> {
+            // 1. 停止本局全部后台计时器
+            physicsTimer.stop();
+            timer.stop();
+            // 2. 释放模型后台资源
+            model.shutdown();
+            model.setOnGameEnd(null);
+            model.setOnCatchSettled(null);
+            // 3. 清空场景级按键监听
+            Scene s = root.getScene();
+            if (s != null) {
+                s.setOnKeyPressed(null);
+                s.setOnKeyReleased(null);
+            }
+            // 4. 移除暂停遮罩与整棵对局节点树
+            pauseView.hide();
+            root.getChildren().remove(gamePane);
+            currentInputController = null;
+            // 5. 重新显示主菜单（全新 MenuView，三个按钮均正常可点）
+            Stage stage = (Stage) root.getScene().getWindow();
+            showMainMenu(root, stage);
+        });
+
         Scene scene = root.getScene();
         if (scene != null) {
             // 按下：KeyCode → (玩家, 语义动作) 的映射只存在于 View 层（mapKeyBinding）；
@@ -351,31 +424,12 @@ public class Main extends Application {
             });
         }
 
-        // 钩子真实物理驱动：每帧由 AnimationTimer 推进 HookImpl 钟摆/抛出/收回/抓取，并重绘画面
-        // PAUSED 时 gameLoopTick 内部冻结，与 GameTimer 倒计时联动
-        final long[] lastFrameNanos = {0};
-        final AnimationTimer physicsTimer = new AnimationTimer() {
-            @Override
-            public void handle(long now) {
-                if (lastFrameNanos[0] == 0) {
-                    lastFrameNanos[0] = now;
-                    return;
-                }
-                double deltaTime = (now - lastFrameNanos[0]) / 1_000_000_000.0;
-                lastFrameNanos[0] = now;
-                // 防止窗口失焦后 deltaTime 留间过长导致物理跳变
-                if (deltaTime > 0.1) deltaTime = 0.1;
-                model.gameLoopTick(deltaTime);
-                gameView.render(model);
-                hudView.render(model);
-            }
-        };
+        // 钩子真实物理驱动 + 倒计时控制器的声明已移至暂停遮罩按钮回调之前（上方），
+        // 以便 lambda 捕获引用；此处仅负责启动它们。
+
+        // 启动物理帧循环
         physicsTimer.start();
 
-        // 倒计时控制器：每秒递减 1，归零结束对局（FR-10）
-        // 注意：GameTimerImpl 的 tick 在后台线程执行，所有 UI 操作必须用
-        // Platform.runLater 切回 JavaFX Application Thread（分层约束：controller 不依赖 javafx）
-        GameTimer timer = new GameTimerImpl(model);
         // 结束流程幂等保护：倒计时归零(FR-10)与物品清空(FR-08)可能竞争，只允许进入一次结算
         final boolean[] ended = {false};
         Runnable enterResult = () -> {
