@@ -19,6 +19,11 @@ import Main.view.PauseView;
 import Main.view.PauseViewImpl;
 import Main.view.ResultView;
 import Main.view.ResultViewImpl;
+<<<<<<< Updated upstream
+=======
+import Main.view.SettingsPane;
+import Main.util.LogUtils;
+>>>>>>> Stashed changes
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -180,9 +185,34 @@ public class Main extends Application {
             startGame(root);
         });
 
+<<<<<<< Updated upstream
+=======
+        // 点击"返回主菜单"：完整对局资源释放 + 界面切换（全部在 FX 线程，仅节点增删，耗时远小于 50ms）
+        resultView.setOnBackToMenu(() -> {
+            // 1. 停止本局全部后台计时器（倒计时线程；物理帧循环已在进入结算时停止）
+            timer.stop();
+            // 2. 解绑对局模型的结束回调，避免旧模型被回调链引用
+            model.setOnGameEnd(null);
+            // 3. 清空场景级按键监听，防止返回菜单后旧 InputController/旧模型仍拦截按键
+            Scene scene = root.getScene();
+            if (scene != null) {
+                scene.setOnKeyPressed(null);
+                scene.setOnKeyReleased(null);
+            }
+            // 4. 移除结算遮罩与整棵对局节点树（Canvas/HUD/暂停遮罩随之一并释放，无旧界面残影）
+            resultView.hide();
+            root.getChildren().remove(gamePane);
+            currentInputController = null; // 本局输入控制器随对局一起释放
+            // 5. 重新显示主菜单（全新 MenuView，三个按钮均正常可点）
+            Stage stage = (Stage) root.getScene().getWindow();
+            showMainMenu(root, stage);
+            LogUtils.logRaw("[FR-31] 已返回主菜单，对局资源释放完成");
+        });
+
+>>>>>>> Stashed changes
         // 胜负判定与渲染由 ResultView 内部完成（读取双方最终分数）
         resultView.show(root, model);
-        System.out.println("[FR-31] 时间到，进入结算：玩家1=$" + model.getPlayer1().getScore()
+        LogUtils.logRaw("[FR-31] 时间到，进入结算：玩家1=$" + model.getPlayer1().getScore()
                 + "，玩家2=$" + model.getPlayer2().getScore());
     }
 

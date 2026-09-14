@@ -20,7 +20,7 @@ public class MysteryBag extends ItemImpl {
     }
 
     @Override
-    public void updatePosition() {
+    public void updatePosition(double deltaTime) {
         // 福袋静止
     }
 

@@ -3,17 +3,35 @@ package Main.util;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 统一控制台日志工具。
  * 所有调试日志统一为 [FR-18] HH:mm:ss.SSS 动作描述 格式，
  * 毫秒时间戳用于验证两名玩家的操作互不阻塞、收回各自独立计时。
+ * <p>
+ * 日志写入通过单线程异步队列执行，避免控制台同步阻塞 IO 拖慢游戏帧。
  */
 public final class LogUtils {
 
     /** 毫秒级时间戳格式 */
     private static final DateTimeFormatter TS_FORMAT =
             DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+
+    /** 异步日志写入线程池（单线程保证日志顺序，守护线程不阻止 JVM 退出） */
+    private static final ExecutorService ASYNC_LOGGER = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        private final AtomicInteger counter = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "game-logger-" + counter.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        }
+    });
 
     private LogUtils() {
         // 工具类禁止实例化
@@ -28,5 +46,25 @@ public final class LogUtils {
     public static String format(String action) {
         String ts = LocalTime.now().format(TS_FORMAT);
         return "[FR-18] " + ts + " " + action;
+    }
+
+    /**
+     * 异步输出日志行：先格式化（在调用线程，保证时间戳准确），
+     * 再提交到后台单线程队列写入 stdout，避免控制台同步阻塞 IO 拖慢游戏帧。
+     *
+     * @param action 动作描述文本
+     */
+    public static void log(String action) {
+        String line = format(action);
+        ASYNC_LOGGER.submit(() -> System.out.println(line));
+    }
+
+    /**
+     * 异步输出已格式化或原始文本（不经过 format 加时间戳前缀）。
+     *
+     * @param line 完整文本行
+     */
+    public static void logRaw(String line) {
+        ASYNC_LOGGER.submit(() -> System.out.println(line));
     }
 }

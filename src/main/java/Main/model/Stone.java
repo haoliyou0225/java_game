@@ -6,7 +6,13 @@ public class Stone extends ItemImpl {
     @Override public void onGrab(Hook hook) {
         this.grabbed = true; // 原版：onGrab 设 grabbed=true
     }
+<<<<<<< Updated upstream
     @Override public void updatePosition() {}
     /** 原版：石头又重又不值钱，回收仅计 1 金币 */
     @Override public int getSettlementGold() { return 1; }
+=======
+
+    @Override
+    public void updatePosition(double deltaTime) {}
+>>>>>>> Stashed changes
 }

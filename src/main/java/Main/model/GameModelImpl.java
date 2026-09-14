@@ -111,7 +111,7 @@ public class GameModelImpl implements GameModel {
         // 2. 物品位置更新 + 携带物品收回完成时结算分数
         List<Item> settled = new ArrayList<>();
         for (Item item : sceneItems) {
-            item.updatePosition();
+            item.updatePosition(deltaTime);
             if (item.isGrabbed() && item.getWeight() > 0) {
                 Hook owner = hook1.ownsItem(item) ? hook1 : (hook2.ownsItem(item) ? hook2 : null);
                 if (owner != null && owner.getState() == HookState.SWINGING) {
@@ -124,8 +124,8 @@ public class GameModelImpl implements GameModel {
                         player2.addScore(score);
                     }
                     settled.add(item);
-                    System.out.println(LogUtils.format("玩家" + owner.getPlayerId()
-                            + " 收回物品，" + (score >= 0 ? "+" : "") + "$" + score));
+                    LogUtils.log("玩家" + owner.getPlayerId()
+                            + " 收回物品，" + (score >= 0 ? "+" : "") + "$" + score);
                 }
             }
         }
@@ -160,7 +160,7 @@ public class GameModelImpl implements GameModel {
             // 仅当钩爪仍处于 THROWING 时才收回：防止定时任务与后续操作产生竞态
             if (hook.getState() == HookState.THROWING) {
                 hook.setState(HookState.SWINGING);
-                System.out.println(LogUtils.format(playerLabel + " 钩爪收回"));
+                LogUtils.log(playerLabel + " 钩爪收回");
             }
         }, 2, TimeUnit.SECONDS); // 2 秒（游戏时间）后自动收回
     }
